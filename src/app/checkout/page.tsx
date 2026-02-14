@@ -49,30 +49,16 @@ function CheckoutContent() {
         const init = async () => {
             console.log('Checkout: Init started')
             try {
-                console.log('Checkout: Checking auth...')
-                const { data: { user }, error: authCheckError } = await supabase.auth.getUser()
-                console.log('Checkout: Auth check done', { user, error: authCheckError })
+                // Use getSession() - instant local check, no network call
+                // getUser() can hang in production causing infinite "Memverifikasi..."
+                console.log('Checkout: Checking session...')
+                const { data: { session } } = await supabase.auth.getSession()
+                console.log('Checkout: Session check done', { hasSession: !!session })
 
                 if (cancelled) return
 
-                if (authCheckError) {
-                    // Handle AbortError specifically - common in dev mode with HMR
-                    if (authCheckError.message?.includes('aborted') || authCheckError.name === 'AbortError') {
-                        console.warn('Auth check was aborted (likely due to component remount). Show retry UI.')
-                        setCheckingAuth(false)
-                        setAuthError(true)
-                        return
-                    }
-
-                    // Other auth errors
-                    console.error('Auth error:', authCheckError)
-                    setCheckingAuth(false)
-                    setAuthError(true)
-                    return
-                }
-
-                if (!user) {
-                    console.warn('Checkout: No user found')
+                if (!session?.user) {
+                    console.warn('Checkout: No session found')
                     setCheckingAuth(false)
                     toast.error('Silakan login untuk checkout')
                     router.replace('/login')
@@ -137,13 +123,13 @@ function CheckoutContent() {
 
                 // Fetch user profile
                 console.log('Checkout: Fetching profile')
-                const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle()
+                const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle()
                 if (cancelled) return
                 if (profile) {
                     setFullName(profile.full_name || '')
                     setWhatsapp(profile.whatsapp_number || '')
                 }
-                setEmail(user.email || '')
+                setEmail(session.user.email || '')
             } catch (err: any) {
                 console.error('Checkout init error:', err)
                 if (!cancelled) {
