@@ -89,10 +89,24 @@ export function Navbar({ initialUser }: NavbarProps) {
     }, [])
 
     const handleLogout = async () => {
-        await supabase.auth.signOut()
-        setUser(null)
-        setSheetOpen(false)
-        router.push('/login')
+        try {
+            await supabase.auth.signOut()
+            setUser(null)
+            setSheetOpen(false)
+            // Refresh first to clear any server-side state/cookies
+            router.refresh()
+            // Redirect to login
+            router.push('/login')
+            // Fallback: if router.push doesn't trigger immediately, use window.location
+            setTimeout(() => {
+                if (window.location.pathname !== '/login') {
+                    window.location.href = '/login'
+                }
+            }, 500)
+        } catch (error) {
+            console.error('Logout error:', error)
+            window.location.href = '/login'
+        }
     }
 
     return (
