@@ -101,9 +101,13 @@ export async function POST(request: NextRequest) {
             <a href="${process.env.NEXT_PUBLIC_SITE_URL}" style="display: inline-block; padding: 10px 20px; background-color: #0070f3; color: white; text-decoration: none; border-radius: 5px;">Belanja Sekarang</a>
             <p>Salam,<br/>Tim F-PEDIA</p>
         `
-        import('@/lib/mail').then(({ broadcastEmail }) => {
-            broadcastEmail(`Promo Spesial: ${data.title}`, emailHtml)
-        })
+        // MUST await on Vercel or the function will be killed before email is sent
+        try {
+            const { broadcastEmail } = await import('@/lib/mail')
+            await broadcastEmail(`Promo Spesial: ${data.title}`, emailHtml)
+        } catch (emailError) {
+            console.error('Failed to broadcast email:', emailError)
+        }
 
         return NextResponse.json(data)
     } catch (err) {

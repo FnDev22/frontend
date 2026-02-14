@@ -81,10 +81,13 @@ export async function POST(request: NextRequest) {
             <p>Stok terbatas, segera order sebelum kehabisan!</p>
             <p>Salam,<br/>Tim F-PEDIA</p>
         `
-        // We don't await to keep UI fast
-        import('@/lib/mail').then(({ broadcastEmail }) => {
-            broadcastEmail(`Produk Baru: ${inserted.title}`, emailHtml)
-        })
+        // MUST await on Vercel or the function will be killed before email is sent
+        try {
+            const { broadcastEmail } = await import('@/lib/mail')
+            await broadcastEmail(`Produk Baru: ${inserted.title}`, emailHtml)
+        } catch (emailError) {
+            console.error('Failed to broadcast email:', emailError)
+        }
 
         return NextResponse.json({
             ...inserted,

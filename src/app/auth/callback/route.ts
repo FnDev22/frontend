@@ -45,17 +45,21 @@ export async function GET(request: Request) {
                 const adminEmail = process.env.ADMIN_EMAIL || 'ae132118@gmail.com'
                 const { sendEmail } = await import('@/lib/mail')
 
-                // Fire and forget email
-                sendEmail({
-                    to: adminEmail,
-                    subject: `[Login Alert] User Login: ${user.email}`,
-                    html: `
-                        <h3>User Login Notification (OAuth)</h3>
-                        <p><strong>User:</strong> ${user.email}</p>
-                        <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
-                        <p><strong>Method:</strong> Google OAuth</p>
-                    `
-                }).catch(err => console.error('Failed to send login email', err))
+                // MUST await on Vercel or the function will be killed before email is sent
+                try {
+                    await sendEmail({
+                        to: adminEmail,
+                        subject: `[Login Alert] User Login: ${user.email}`,
+                        html: `
+                            <h3>User Login Notification (OAuth)</h3>
+                            <p><strong>User:</strong> ${user.email}</p>
+                            <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+                            <p><strong>Method:</strong> Google OAuth</p>
+                        `
+                    })
+                } catch (err) {
+                    console.error('Failed to send login email', err)
+                }
             }
 
             return NextResponse.redirect(`${origin}${next}`)
