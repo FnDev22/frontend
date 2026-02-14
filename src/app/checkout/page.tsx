@@ -46,13 +46,32 @@ function CheckoutContent() {
 
     useEffect(() => {
         let cancelled = false
+
+        // Helper: get session with retry for AbortError
+        const getSessionWithRetry = async (retries = 3, delay = 1000): Promise<any> => {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const { data: { session }, error } = await supabase.auth.getSession()
+                    if (error) throw error
+                    return session
+                } catch (err: any) {
+                    const isAbort = err?.message?.includes('aborted') || err?.name === 'AbortError'
+                    if (isAbort && i < retries - 1) {
+                        console.warn(`Session check attempt ${i + 1} aborted, retrying in ${delay}ms...`)
+                        await new Promise(r => setTimeout(r, delay))
+                        continue
+                    }
+                    throw err
+                }
+            }
+            return null
+        }
+
         const init = async () => {
             console.log('Checkout: Init started')
             try {
-                // Use getSession() - instant local check, no network call
-                // getUser() can hang in production causing infinite "Memverifikasi..."
                 console.log('Checkout: Checking session...')
-                const { data: { session } } = await supabase.auth.getSession()
+                const session = await getSessionWithRetry()
                 console.log('Checkout: Session check done', { hasSession: !!session })
 
                 if (cancelled) return
@@ -92,7 +111,6 @@ function CheckoutContent() {
                                 stockCount = data.count ?? 0
                             }
                         } catch (stockError) {
-                            // Gracefully handle stock fetch errors - use default 0
                             console.warn('Failed to fetch stock, using default 0:', stockError)
                         }
 
@@ -133,16 +151,19 @@ function CheckoutContent() {
             } catch (err: any) {
                 console.error('Checkout init error:', err)
                 if (!cancelled) {
-                    toast.error('Gagal memuat sesi: ' + (err.message || 'Error tidak diketahui'))
+                    const isAbort = err?.message?.includes('aborted') || err?.name === 'AbortError'
+                    if (isAbort) {
+                        // AbortError after all retries - show retry UI
+                        setAuthError(true)
+                    } else {
+                        toast.error('Gagal memuat sesi: ' + (err.message || 'Error tidak diketahui'))
+                    }
                     setCheckingAuth(false)
                     setProductLoadDone(true)
-                    setProduct(null)
                 }
             } finally {
                 if (!cancelled) {
-                    // Ensure verification spinner is gone no matter what
                     setCheckingAuth(false)
-                    // Make sure product load is marked done so we don't show "Loading product..." forever
                     setProductLoadDone(true)
                 }
             }
