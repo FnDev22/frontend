@@ -22,6 +22,7 @@ function CheckoutContent() {
     const [isAuthenticated, setIsAuthenticated] = useState(false)
     const [checkingAuth, setCheckingAuth] = useState(true)
     const [productLoadDone, setProductLoadDone] = useState(false)
+    const [authError, setAuthError] = useState(false)
 
     const [fullName, setFullName] = useState('')
     const [email, setEmail] = useState('')
@@ -46,12 +47,32 @@ function CheckoutContent() {
     useEffect(() => {
         let cancelled = false
         const init = async () => {
+            console.log('Checkout: Init started')
             try {
-                // Check auth first
-                const { data: { user } } = await supabase.auth.getUser()
+                console.log('Checkout: Checking auth...')
+                const { data: { user }, error: authCheckError } = await supabase.auth.getUser()
+                console.log('Checkout: Auth check done', { user, error: authCheckError })
+
                 if (cancelled) return
 
+                if (authCheckError) {
+                    // Handle AbortError specifically - common in dev mode with HMR
+                    if (authCheckError.message?.includes('aborted') || authCheckError.name === 'AbortError') {
+                        console.warn('Auth check was aborted (likely due to component remount). Show retry UI.')
+                        setCheckingAuth(false)
+                        setAuthError(true)
+                        return
+                    }
+
+                    // Other auth errors
+                    console.error('Auth error:', authCheckError)
+                    setCheckingAuth(false)
+                    setAuthError(true)
+                    return
+                }
+
                 if (!user) {
+                    console.warn('Checkout: No user found')
                     setCheckingAuth(false)
                     toast.error('Silakan login untuk checkout')
                     router.replace('/login')
@@ -63,32 +84,59 @@ function CheckoutContent() {
 
                 // Fetch product if productId exists
                 if (productId) {
-                    const { data, error } = await supabase.rpc('get_product_with_stock', { p_product_id: productId })
+                    console.log('Checkout: Fetching product', productId)
+                    const { data: prodData, error: prodError } = await supabase
+                        .from('products')
+                        .select('*')
+                        .eq('id', productId)
+                        .maybeSingle()
+
                     if (cancelled) return
-                    setProductLoadDone(true)
-                    const row = Array.isArray(data) ? data[0] : data
-                    if (row) {
-                        const minBuy = row.min_buy ?? 1
+
+                    if (prodData) {
+                        let stockCount = 0
+                        try {
+                            const stockRes = await fetch(`/api/products/stock?productId=${productId}`)
+                            if (cancelled) return
+
+                            if (!stockRes.ok) {
+                                console.warn('Stock API returned error:', stockRes.status)
+                            } else {
+                                const data = await stockRes.json()
+                                stockCount = data.count ?? 0
+                            }
+                        } catch (stockError) {
+                            // Gracefully handle stock fetch errors - use default 0
+                            console.warn('Failed to fetch stock, using default 0:', stockError)
+                        }
+
+                        if (cancelled) return
+
+                        const minBuy = prodData.min_buy ?? 1
                         setProduct({
-                            ...row,
+                            ...prodData,
+                            available_stock: stockCount,
                             min_buy: minBuy,
-                            category: row.category ?? '',
-                            image_url: row.image_url ?? '',
-                            avg_delivery_time: row.avg_delivery_time ?? '',
-                            instructions: row.instructions ?? '',
-                            description: row.description ?? '',
-                            is_sold: row.is_sold ?? false,
+                            category: prodData.category ?? '',
+                            image_url: prodData.image_url ?? '',
+                            avg_delivery_time: prodData.avg_delivery_time ?? '',
+                            instructions: prodData.instructions ?? '',
+                            description: prodData.description ?? '',
+                            is_sold: prodData.is_sold ?? false,
+                            is_preorder: prodData.is_preorder ?? false,
                         })
-                        setQuantity((q) => (q < minBuy ? minBuy : Math.min(q, row.available_stock ?? minBuy)))
+                        setQuantity((q) => (q < minBuy ? minBuy : Math.min(q, (prodData.is_preorder ? 999999 : (stockCount || minBuy)))))
                     } else {
                         setProduct(null)
-                        if (error) toast.error('Gagal memuat produk')
+                        if (prodError) toast.error('Gagal memuat produk: ' + prodError.message)
                     }
+                    setProductLoadDone(true)
                 } else {
                     setProductLoadDone(true)
                 }
 
                 // Fetch user profile
+                console.log('Checkout: Fetching profile')
                 const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle()
                 if (cancelled) return
                 if (profile) {
@@ -96,10 +144,21 @@ function CheckoutContent() {
                     setWhatsapp(profile.whatsapp_number || '')
                 }
                 setEmail(user.email || '')
-            } catch (err) {
+            } catch (err: any) {
                 console.error('Checkout init error:', err)
-                setCheckingAuth(false)
-                setProductLoadDone(true)
+                if (!cancelled) {
+                    toast.error('Gagal memuat sesi: ' + (err.message || 'Error tidak diketahui'))
+                    setCheckingAuth(false)
+                    setProductLoadDone(true)
+                    setProduct(null)
+                }
+            } finally {
+                if (!cancelled) {
+                    // Ensure verification spinner is gone no matter what
+                    setCheckingAuth(false)
+                    // Make sure product load is marked done so we don't show "Loading product..." forever
+                    setProductLoadDone(true)
+                }
             }
         }
 
@@ -199,6 +258,24 @@ function CheckoutContent() {
         }
     }
 
+    if (authError) {
+        return (
+            <div className="min-h-[60vh] flex items-center justify-center px-4">
+                <Card className="max-w-sm w-full">
+                    <CardContent className="pt-6 text-center space-y-4">
+                        <p className="text-muted-foreground">Gagal memverifikasi sesi. Silakan coba lagi.</p>
+                        <Button onClick={() => window.location.reload()} className="w-full">
+                            Muat Ulang Halaman
+                        </Button>
+                        <Button asChild variant="outline" className="w-full">
+                            <Link href="/login">Atau Login Ulang</Link>
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
+        )
+    }
+
     if (checkingAuth) {
         return (
             <div className="min-h-[60vh] flex items-center justify-center px-4">
@@ -247,10 +324,23 @@ function CheckoutContent() {
 
     const availableStock = product.available_stock ?? 0
     const minBuy = product.min_buy ?? 1
-    const canBuy = availableStock >= minBuy
+    const isPreorder = product.is_preorder ?? false
+    const canBuy = isPreorder || availableStock >= minBuy
 
     const step = paymentData ? 2 : 1
-    const total = Number(product.price) * quantity
+
+    // Calculate unit price based on wholesale tiers
+    let unitPrice = Number(product.price)
+    if (product.wholesale_prices && Array.isArray(product.wholesale_prices)) {
+        // Sort tiers by min_qty descending to find the highest matching tier
+        const tiers = [...product.wholesale_prices].sort((a, b) => b.min_qty - a.min_qty)
+        const matchedTier = tiers.find(t => quantity >= t.min_qty)
+        if (matchedTier) {
+            unitPrice = Number(matchedTier.price)
+        }
+    }
+
+    const total = unitPrice * quantity
 
     return (
         <div className="container max-w-xl px-4 py-6 sm:py-10 mx-auto">
@@ -279,18 +369,32 @@ function CheckoutContent() {
                                 <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">Ringkasan</h3>
                                 <div className="flex justify-between items-center mb-1">
                                     <span className="font-medium">{product.title}</span>
-                                    <span className="text-muted-foreground">Rp {Number(product.price).toLocaleString('id-ID')}/unit</span>
+                                    <div className="text-right">
+                                        <span className="block">Rp {unitPrice.toLocaleString('id-ID')}/unit</span>
+                                        {unitPrice < Number(product.price) && (
+                                            <span className="text-xs text-green-600 font-medium ml-2">
+                                                (Grosir)
+                                            </span>
+                                        )}
+                                        {unitPrice < Number(product.price) && (
+                                            <span className="block text-xs text-muted-foreground line-through">
+                                                Rp {Number(product.price).toLocaleString('id-ID')}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
-                                <p className="text-xs text-muted-foreground">Kategori: {product.category} · Stok: {(product.available_stock ?? 0)} unit</p>
+                                <p className="text-xs text-muted-foreground">
+                                    Kategori: {product.category} · {isPreorder ? <span className="text-orange-600 font-medium">Pre-Order</span> : `Stok: ${availableStock} unit`}
+                                </p>
                                 <div className="mt-3 pt-3 border-t flex justify-between">
                                     <Label htmlFor="quantity" className="text-sm">Jumlah</Label>
                                     <Input
                                         id="quantity"
                                         type="number"
                                         min={minBuy}
-                                        max={availableStock}
+                                        max={isPreorder ? 999999 : availableStock}
                                         value={quantity}
-                                        onChange={(e) => setQuantity(Math.max(minBuy, Math.min(availableStock, parseInt(e.target.value, 10) || minBuy)))}
+                                        onChange={(e) => setQuantity(Math.max(minBuy, Math.min((isPreorder ? 999999 : availableStock), parseInt(e.target.value, 10) || minBuy)))}
                                         disabled={!canBuy}
                                         className="w-20 h-9 text-center"
                                     />
@@ -459,7 +563,7 @@ function CheckoutContent() {
                     )}
                 </CardContent>
             </Card>
-        </div>
+        </div >
     )
 }
 

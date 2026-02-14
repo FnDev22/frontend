@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { enqueueWhatsAppMessage } from '@/lib/whatsapp-queue'
+import { revalidatePath } from 'next/cache'
 
 /** Normalisasi nomor WA: 08xxx / +62xxx -> 62xxx (tanpa @s.whatsapp.net) untuk dikirim ke whatsapp-service */
 function normalizePhoneForWhatsApp(input: string | null | undefined): string | null {
@@ -96,6 +97,8 @@ export async function POST(request: Request) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
+
     const { error: insertError } = await adminSupabase
         .from('orders')
         .insert({
@@ -110,6 +113,8 @@ export async function POST(request: Request) {
             promo_text: typeof promoText === 'string' ? promoText.trim() || null : null,
             quantity,
             total_price: totalPayment,
+            payment_url: qrString, // Save QR string
+            expires_at: expiresAt,
         })
 
     if (insertError) {
@@ -117,11 +122,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
     }
 
+    // Refresh product page to update stock immediately
+    revalidatePath(`/product/${productId}`)
+
     const promoTextStr = typeof promoText === 'string' ? promoText.trim() : ''
     const productTitle = product.title || 'Produk'
 
-    // Batas waktu bayar: 24 jam dari sekarang
-    const payBefore = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    // Batas waktu bayar string
+    const payBefore = new Date(expiresAt)
     const payBeforeStr = payBefore.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })
 
     const whatsappServiceUrl = process.env.WHATSAPP_API_URL || 'http://localhost:3001'
@@ -140,6 +148,42 @@ export async function POST(request: Request) {
     const adminNumber = normalizePhoneForWhatsApp(adminNumberRaw) || adminNumberRaw.replace(/\D/g, '').replace(/^0/, '62') || '6285814581266'
     const adminMsg = `*Order Baru F-PEDIA*\n\nProduk: ${productTitle}\nJumlah: ${quantity}\nTotal: Rp ${totalPayment.toLocaleString('id-ID')}\nPemesan: ${email}\nWA: ${whatsapp}\nOrder ID: ${orderId}`
     await sendWhatsApp(adminNumber, adminMsg, 'admin')
+
+    // Email Notification to Admin (Styled)
+    const { sendEmail } = await import('@/lib/mail')
+    const adminEmail = process.env.ADMIN_EMAIL || 'ae132118@gmail.com'
+
+    // Base email template function
+    const emailTemplate = (content: string) => `
+        <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 8px; overflow: hidden;">
+            <div style="background-color: #000; padding: 20px; text-align: center;">
+                <img src="https://f-pedia.my.id/logo.png" alt="F-PEDIA Logo" style="height: 40px; object-fit: contain;">
+            </div>
+            <div style="padding: 24px;">
+                ${content}
+            </div>
+            <div style="background-color: #f9f9f9; padding: 16px; text-align: center; font-size: 12px; color: #888;">
+                &copy; ${new Date().getFullYear()} F-PEDIA. All rights reserved.
+            </div>
+        </div>
+    `
+
+    await sendEmail({
+        to: adminEmail,
+        subject: `[New Order] ${orderId} - ${productTitle}`,
+        html: emailTemplate(`
+            <h2 style="color: #000; margin-top: 0;">Order Baru Masuk</h2>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Order ID</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${orderId}</td></tr>
+                <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Produk</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${productTitle}</td></tr>
+                <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Jumlah</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${quantity} unit</td></tr>
+                <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Total</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #d32f2f; font-weight: bold;">Rp ${totalPayment.toLocaleString('id-ID')}</td></tr>
+                <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Customer</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${email}</td></tr>
+                <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>WhatsApp</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${whatsapp}</td></tr>
+            </table>
+            <p style="margin-bottom: 0;">Status: <strong>Pending Payment</strong></p>
+        `)
+    }).catch(err => console.error('Failed to send admin email', err))
 
     const userWhatsappNormalized = typeof whatsapp === 'string' && whatsapp.trim() ? normalizePhoneForWhatsApp(whatsapp.trim()) : null
     const userMsgOrder = `*Kamu telah order di F-PEDIA*\n\nHalo,\n\nPesanan Anda:\n• Produk: *${productTitle}*\n• Jumlah: ${quantity} unit\n• Total pembayaran: Rp ${totalPayment.toLocaleString('id-ID')}\n• Order ID: ${orderId}\n\n${promoTextStr ? `*Promo:* ${promoTextStr}\n\n` : ''}Silakan scan QR untuk pembayaran.\n*Harap bayar sebelum: ${payBeforeStr}*\n\nSetelah terverifikasi, akun akan dikirim ke WhatsApp ini.\n\nTerima kasih!`

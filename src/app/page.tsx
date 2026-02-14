@@ -2,8 +2,9 @@ import { createClient } from '@/lib/supabase-server'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Shield, Zap, HeadphonesIcon, ArrowRight, Bolt, Search } from 'lucide-react'
+import { Shield, Zap, HeadphonesIcon, ArrowRight, Bolt, Search, Hourglass } from 'lucide-react'
 import { getPublicStorageUrl } from '@/lib/utils'
+import { adminSupabase } from '@/lib/supabase-admin'
 
 export const revalidate = 0
 
@@ -16,6 +17,7 @@ type ProductRow = {
   image_url?: string
   available_stock?: number
   sold_count?: number
+  is_preorder?: boolean
 }
 
 // Helper component for Typewriter effect
@@ -30,8 +32,16 @@ const TypewriterText = ({ text }: { text: string }) => {
 export default async function Home() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  const { data: products } = await supabase.rpc('get_products_with_stock')
-  const list = (products || []) as ProductRow[]
+  const { data: productsData } = await adminSupabase
+    .from('products')
+    .select('*, account_stock(count)')
+    .eq('is_deleted', false)
+    .eq('account_stock.is_sold', false)
+
+  const list = (productsData || []).map((p: any) => ({
+    ...p,
+    available_stock: p.account_stock?.[0]?.count || 0
+  })) as ProductRow[]
   const isLoggedIn = !!user
 
   return (
@@ -111,6 +121,7 @@ export default async function Home() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 w-full">
             {list.map((product, idx) => {
               const hasStock = (product.available_stock ?? 0) > 0
+              const canPreorder = !hasStock && (product.is_preorder ?? false)
               const sold = product.sold_count ?? 0
               return (
                 <Link
@@ -134,9 +145,17 @@ export default async function Home() {
                       </Badge>
                     </div>
 
-                    {!hasStock && (
+                    {!hasStock && !canPreorder && (
                       <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-[2px]">
-                        <Badge variant="destructive" className="text-sm px-4 py-1">Habis Terjual</Badge>
+                        <Badge variant="destructive" className="text-sm px-4 py-1">Stok Habis</Badge>
+                      </div>
+                    )}
+
+                    {canPreorder && (
+                      <div className="absolute top-4 right-4">
+                        <Badge className="bg-amber-500 hover:bg-amber-600 text-white border-0 text-sm px-3 py-1 shadow-lg animate-pulse">
+                          <Hourglass className="w-3.5 h-3.5 mr-1" /> Pre-Order
+                        </Badge>
                       </div>
                     )}
                   </div>

@@ -47,9 +47,32 @@ function LoginForm() {
             })
 
             if (error) {
-                toast.error(error.message)
+                console.error('Login error:', error)
+                toast.error(error.message || 'Email atau password salah')
+                fetch('/api/auth/log-failure', {
+                    method: 'POST',
+                    body: JSON.stringify({ email })
+                })
             } else {
                 toast.success('Login successful!')
+
+                // Notify Admin via Email
+                fetch('/api/notify-login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email,
+                        time: new Date().toLocaleString(),
+                        userAgent: navigator.userAgent
+                    })
+                }).catch(() => { })
+
+                // Log Activity to Database
+                fetch('/api/log-activity', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                }).catch((err) => console.error('Log activity failed', err))
+
                 router.push('/')
                 router.refresh()
             }

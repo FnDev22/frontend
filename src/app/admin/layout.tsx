@@ -3,16 +3,19 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { LayoutDashboard, Package, ShoppingCart, Users, Home, Menu } from 'lucide-react'
+import { LayoutDashboard, Package, ShoppingCart, Users, Home, Menu, History } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
+import { ClipboardList } from 'lucide-react'
 
 const navItems = [
     { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/admin/products', label: 'Produk', icon: Package },
     { href: '/admin/orders', label: 'Pesanan', icon: ShoppingCart },
+    { href: '/admin/preorder', label: 'Preorder', icon: ClipboardList },
     { href: '/admin/users', label: 'Pengguna', icon: Users },
+    { href: '/admin/logs', label: 'Aktivitas Login', icon: History },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -24,27 +27,30 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             {navItems.map((item) => {
                 const isActive = pathname === item.href
                 return (
-                    <Link key={item.href} href={item.href} onClick={() => setOpen(false)}>
-                        <Button
-                            variant={isActive ? 'secondary' : 'ghost'}
-                            className={cn(
-                                'w-full justify-start gap-3 font-medium',
-                                isActive && 'bg-muted'
-                            )}
-                        >
+                    <Button
+                        key={item.href}
+                        variant={isActive ? 'secondary' : 'ghost'}
+                        className={cn(
+                            'w-full justify-start gap-3 font-medium',
+                            isActive && 'bg-muted'
+                        )}
+                        asChild
+                        onClick={() => setOpen(false)}
+                    >
+                        <Link href={item.href}>
                             <item.icon className={cn('h-4 w-4 sm:h-5 sm:w-5', isActive && 'text-primary')} />
                             {item.label}
-                        </Button>
-                    </Link>
+                        </Link>
+                    </Button>
                 )
             })}
             <div className="border-t my-2" />
-            <Link href="/" onClick={() => setOpen(false)}>
-                <Button variant="ghost" className="w-full justify-start gap-3 font-medium text-muted-foreground">
+            <Button variant="ghost" className="w-full justify-start gap-3 font-medium text-muted-foreground" asChild>
+                <Link href="/" onClick={() => setOpen(false)}>
                     <Home className="h-4 w-4 sm:h-5 sm:w-5" />
                     Kembali ke toko
-                </Button>
-            </Link>
+                </Link>
+            </Button>
         </nav>
     )
 
@@ -69,7 +75,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         </Button>
                     </SheetTrigger>
                     <SheetContent side="left" className="w-64 p-0">
-                        <div className="flex h-14 items-center border-b px-4 font-semibold">Menu</div>
+                        <SheetTitle className="flex h-14 items-center border-b px-4 font-semibold">Menu</SheetTitle>
                         {sidebar}
                     </SheetContent>
                 </Sheet>

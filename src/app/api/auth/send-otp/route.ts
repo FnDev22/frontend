@@ -16,23 +16,24 @@ function normalizePhone(phone: string) {
 
 export async function POST(request: NextRequest) {
     try {
-        const { phone, purpose } = await request.json()
+        const { phone, email, purpose } = await request.json()
 
-        if (!phone || !purpose) {
-            return NextResponse.json({ error: 'Phone and purpose required' }, { status: 400 })
+        if ((!phone && !email) || !purpose) {
+            return NextResponse.json({ error: 'Phone/Email and purpose required' }, { status: 400 })
         }
 
-        const normalizedPhone = normalizePhone(phone)
+        const isEmail = !!email
+        const identifier = isEmail ? email.trim().toLowerCase() : normalizePhone(phone)
         const code = Math.floor(100000 + Math.random() * 900000).toString() // 6 digits
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // 5 minutes
 
         const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-        // Save OTP
+        // Save OTP (using 'phone' column as generic identifier)
         const { error: dbError } = await adminSupabase
             .from('otp_codes')
             .insert({
-                phone: normalizedPhone,
+                phone: identifier,
                 code,
                 purpose,
                 expires_at: expiresAt.toISOString()
@@ -43,10 +44,26 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Failed to generate OTP' }, { status: 500 })
         }
 
-        // Send WhatsApp
-        const message = `Kode OTP F-PEDIA Anda: *${code}*\n\nJangan berikan kode ini kepada siapapun via telepon/WA. Berlaku 5 menit.`
-
-        await enqueueWhatsAppMessage(adminSupabase, normalizedPhone, message)
+        // Send OTP via Email or WhatsApp
+        if (isEmail) {
+            const { sendEmail } = await import('@/lib/mail')
+            await sendEmail({
+                to: identifier,
+                subject: `Kode OTP F-PEDIA: ${code}`,
+                html: `
+                    <div style="font-family: sans-serif; padding: 20px;">
+                        <h2>Verifikasi OTP F-PEDIA</h2>
+                        <p>Kode OTP Anda adalah:</p>
+                        <h1 style="letter-spacing: 5px; color: #2563eb;">${code}</h1>
+                        <p>JANGAN BERIKAN kode ini kepada siapapun.</p>
+                        <p>Kode berlaku selama 5 menit.</p>
+                    </div>
+                `
+            })
+        } else {
+            const message = `Kode OTP F-PEDIA Anda: *${code}*\n\nJangan berikan kode ini kepada siapapun via telepon/WA. Berlaku 5 menit.`
+            await enqueueWhatsAppMessage(adminSupabase, identifier, message)
+        }
 
         return NextResponse.json({ success: true, message: 'OTP sent' })
 

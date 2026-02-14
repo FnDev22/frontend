@@ -103,7 +103,7 @@ export default function UsersClient({ initialUsers }: { initialUsers: Profile[] 
                                         </SelectContent>
                                     </Select>
                                 </TableCell>
-                                <TableCell>{new Date(user.created_at).toLocaleDateString()}</TableCell>
+                                <TableCell>{new Date(user.created_at).toLocaleDateString('en-GB')}</TableCell>
                                 <TableCell>
                                     <button
                                         className="text-xs underline text-muted-foreground hover:text-foreground"

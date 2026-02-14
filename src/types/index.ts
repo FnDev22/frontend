@@ -23,6 +23,8 @@ export type Product = {
     instructions: string
     available_stock?: number
     sold_count?: number
+    wholesale_prices?: { min_qty: number, price: number }[]
+    is_preorder?: boolean
 }
 
 export type Order = {
@@ -38,6 +40,10 @@ export type Order = {
     note: string
     quantity?: number
     product?: Product
+    total_price?: number
+    payment_url?: string
+    expires_at?: string
+    promo_text?: string
 }
 
 export type AccountStock = {

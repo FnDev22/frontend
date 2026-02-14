@@ -30,19 +30,19 @@ export default function RegisterPage() {
         }
         setLoading(true)
 
-        // Step 1: Send OTP
+        // Step 1: Send OTP to Email
         try {
             const res = await fetch('/api/auth/send-otp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone: whatsapp, purpose: 'register' }),
+                body: JSON.stringify({ email: email, purpose: 'register' }),
             })
             const data = await res.json()
 
             if (!res.ok) throw new Error(data.error || 'Gagal mengirim OTP')
 
             setShowOtpModal(true)
-            toast.success('Kode OTP telah dikirim ke WhatsApp Anda')
+            toast.success('Kode OTP telah dikirim ke Email Anda')
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Gagal mengirim OTP')
         } finally {
@@ -53,33 +53,25 @@ export default function RegisterPage() {
     const verifyOtp = async () => {
         setVerifying(true)
         try {
-            const res = await fetch('/api/auth/verify-otp', {
+            // Call the consolidated API that checks OTP and creates user
+            const res = await fetch('/api/auth/register-verified', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone: whatsapp, code: otpCode, purpose: 'register' }),
+                body: JSON.stringify({
+                    email,
+                    password,
+                    full_name: fullName,
+                    whatsapp_number: whatsapp,
+                    otp_code: otpCode
+                }),
             })
             const data = await res.json()
 
-            if (!res.ok || !data.valid) throw new Error(data.error || 'Kode OTP salah')
+            if (!res.ok) throw new Error(data.error || 'Verifikasi gagal')
 
-            // Step 2: Register to Supabase
-            const { error } = await supabase.auth.signUp({
-                email,
-                password,
-                options: {
-                    data: {
-                        full_name: fullName,
-                        whatsapp_number: whatsapp,
-                    },
-                },
-            })
+            toast.success('Registrasi berhasil! Silakan login.')
+            router.push('/login')
 
-            if (error) {
-                toast.error(error.message)
-            } else {
-                toast.success('Registrasi berhasil! Silakan cek email untuk verifikasi.')
-                router.push('/login')
-            }
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Verifikasi gagal')
         } finally {
@@ -189,8 +181,8 @@ export default function RegisterPage() {
                         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                             <Card className="w-full max-w-sm">
                                 <CardHeader>
-                                    <CardTitle>Verifikasi WhatsApp</CardTitle>
-                                    <CardDescription>Masukkan kode OTP yang dikirim ke {whatsapp}</CardDescription>
+                                    <CardTitle>Verifikasi Email</CardTitle>
+                                    <CardDescription>Masukkan kode OTP yang dikirim ke {email}</CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                     <div className="space-y-4">

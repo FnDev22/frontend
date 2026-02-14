@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { rejectBrowserGet } from '@/lib/api-protect'
+import { encrypt, decrypt } from '@/lib/crypto'
 
 const ADMIN_EMAIL = 'ae132118@gmail.com'
 
@@ -31,7 +32,15 @@ export async function GET(request: NextRequest) {
             .order('created_at', { ascending: false })
 
         if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-        return NextResponse.json({ list: list ?? [] })
+
+        // Decrypt before sending to admin
+        const decryptedList = (list || []).map(item => ({
+            ...item,
+            email: decrypt(item.email),
+            password: decrypt(item.password)
+        }))
+
+        return NextResponse.json({ list: decryptedList })
     } catch (err) {
         console.error('Admin products/accounts GET error:', err)
         return NextResponse.json(
@@ -68,8 +77,8 @@ export async function POST(request: NextRequest) {
 
         const { error } = await supabaseAdmin.from('account_stock').insert({
             product_id,
-            email: String(email).trim(),
-            password: String(password).trim(),
+            email: encrypt(String(email).trim()),
+            password: encrypt(String(password).trim()),
         })
 
         if (error) {
@@ -83,7 +92,13 @@ export async function POST(request: NextRequest) {
             .eq('product_id', product_id)
             .order('created_at', { ascending: false })
 
-        return NextResponse.json({ list: list ?? [] })
+        const decryptedList = (list || []).map(item => ({
+            ...item,
+            email: decrypt(item.email),
+            password: decrypt(item.password)
+        }))
+
+        return NextResponse.json({ list: decryptedList })
     } catch (err) {
         console.error('Admin products/accounts API error:', err)
         return NextResponse.json(
@@ -131,8 +146,8 @@ export async function PATCH(request: NextRequest) {
         if (row.is_sold) return NextResponse.json({ error: 'Akun sudah terjual, tidak bisa diedit' }, { status: 400 })
 
         const updates: { email?: string; password?: string } = {}
-        if (typeof email === 'string' && email.trim()) updates.email = email.trim()
-        if (typeof password === 'string' && password.trim()) updates.password = password.trim()
+        if (typeof email === 'string' && email.trim()) updates.email = encrypt(email.trim())
+        if (typeof password === 'string' && password.trim()) updates.password = encrypt(password.trim())
         if (Object.keys(updates).length === 0) {
             return NextResponse.json({ error: 'Berikan email atau password baru' }, { status: 400 })
         }
@@ -143,7 +158,12 @@ export async function PATCH(request: NextRequest) {
         const pid = product_id || row?.product_id
         if (pid) {
             const { data: list } = await supabaseAdmin.from('account_stock').select('*').eq('product_id', pid).order('created_at', { ascending: false })
-            return NextResponse.json({ list: list ?? [] })
+            const decryptedList = (list || []).map(item => ({
+                ...item,
+                email: decrypt(item.email),
+                password: decrypt(item.password)
+            }))
+            return NextResponse.json({ list: decryptedList })
         }
         return NextResponse.json({ success: true })
     } catch (err) {
@@ -190,7 +210,15 @@ export async function DELETE(request: NextRequest) {
             .eq('product_id', pid)
             .order('created_at', { ascending: false })
 
-        return NextResponse.json({ list: list ?? [] })
+            .order('created_at', { ascending: false })
+
+        const decryptedList = (list || []).map(item => ({
+            ...item,
+            email: decrypt(item.email),
+            password: decrypt(item.password)
+        }))
+
+        return NextResponse.json({ list: decryptedList })
     } catch (err) {
         console.error('Admin accounts DELETE error:', err)
         return NextResponse.json({ error: err instanceof Error ? err.message : 'Server error' }, { status: 500 })

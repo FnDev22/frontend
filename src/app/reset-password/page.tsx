@@ -12,7 +12,7 @@ import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 
 export default function ResetPasswordPage() {
-    const [phone, setPhone] = useState('')
+    const [email, setEmail] = useState('')
     const [otpCode, setOtpCode] = useState('')
     const [newPassword, setNewPassword] = useState('')
     const [loading, setLoading] = useState(false)
@@ -21,8 +21,8 @@ export default function ResetPasswordPage() {
 
     const handleSendOtp = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (!phone.trim()) {
-            toast.error('Masukkan nomor WhatsApp')
+        if (!email.trim()) {
+            toast.error('Masukkan Email')
             return
         }
         setLoading(true)
@@ -30,12 +30,12 @@ export default function ResetPasswordPage() {
             const res = await fetch('/api/auth/send-otp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone, purpose: 'reset_password' }),
+                body: JSON.stringify({ email, purpose: 'reset_password' }),
             })
             const data = await res.json()
             if (!res.ok) throw new Error(data.error || 'Gagal mengirim OTP')
 
-            toast.success('Kode OTP dikirim ke WhatsApp')
+            toast.success('Kode OTP dikirim ke Email')
             setStep('verify')
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Gagal mengirim OTP')
@@ -55,7 +55,7 @@ export default function ResetPasswordPage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    phone,
+                    email,
                     otpCode,
                     newPassword
                 }),
@@ -85,13 +85,13 @@ export default function ResetPasswordPage() {
                     {!step && (
                         <form onSubmit={handleSendOtp} className="grid gap-4">
                             <div className="grid gap-2">
-                                <Label htmlFor="phone">Nomor WhatsApp</Label>
+                                <Label htmlFor="email">Email</Label>
                                 <Input
-                                    id="phone"
-                                    type="text"
-                                    placeholder="62xxxxxxxxxx"
-                                    value={phone}
-                                    onChange={(e) => setPhone(e.target.value)}
+                                    id="email"
+                                    type="email"
+                                    placeholder="m@example.com"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
                                     required
                                 />
                             </div>

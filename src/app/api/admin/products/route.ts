@@ -22,6 +22,8 @@ export async function POST(request: NextRequest) {
             min_buy,
             avg_delivery_time,
             instructions,
+            wholesale_prices,
+            is_preorder,
         } = body
 
         if (!title || typeof title !== 'string' || !title.trim()) {
@@ -47,19 +49,42 @@ export async function POST(request: NextRequest) {
             min_buy: min_buy != null ? Number(min_buy) : 1,
             avg_delivery_time: avg_delivery_time != null ? String(avg_delivery_time).trim() : '',
             instructions: instructions != null ? String(instructions).trim() : '',
+            wholesale_prices: Array.isArray(wholesale_prices) ? wholesale_prices : [],
+            is_preorder: typeof is_preorder === 'boolean' ? is_preorder : false,
             is_sold: false,
+            is_deleted: false,
         }
 
         const { data: inserted, error } = await supabaseAdmin
             .from('products')
             .insert(productData)
-            .select('id, title, description, price, category, image_url, min_buy, avg_delivery_time, instructions, created_at, is_sold')
+            .select('id, title, description, price, category, image_url, min_buy, avg_delivery_time, instructions, wholesale_prices, is_preorder, is_deleted, created_at, is_sold')
             .single()
 
         if (error) {
             console.error('Admin products insert error:', error)
             return NextResponse.json({ error: error.message, code: error.code }, { status: 400 })
         }
+
+        // Broadcast email to all users
+        const emailHtml = `
+            <h2>Produk Baru Tersedia: ${inserted.title}</h2>
+            <p>Halo,</p>
+            <p>Kami baru saja menambahkan produk baru yang mungkin Anda sukai:</p>
+            <div style="border: 1px solid #ccc; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                <img src="${inserted.image_url}" alt="${inserted.title}" style="max-width: 100%; height: auto; max-height: 200px; object-fit: cover;" />
+                <h3>${inserted.title}</h3>
+                <p>Harga: Rp ${inserted.price.toLocaleString('id-ID')}</p>
+                <p>${inserted.description}</p>
+                <a href="${process.env.NEXT_PUBLIC_SITE_URL}/products/${inserted.id}" style="display: inline-block; padding: 10px 20px; background-color: #0070f3; color: white; text-decoration: none; border-radius: 5px;">Lihat Produk</a>
+            </div>
+            <p>Stok terbatas, segera order sebelum kehabisan!</p>
+            <p>Salam,<br/>Tim F-PEDIA</p>
+        `
+        // We don't await to keep UI fast
+        import('@/lib/mail').then(({ broadcastEmail }) => {
+            broadcastEmail(`Produk Baru: ${inserted.title}`, emailHtml)
+        })
 
         return NextResponse.json({
             ...inserted,

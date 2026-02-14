@@ -27,6 +27,10 @@ export const metadata: Metadata = {
   },
 };
 
+import { SecurityProvider } from "@/components/SecurityProvider";
+
+// ... existing imports
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -37,18 +41,22 @@ export default async function RootLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
+  const isAdmin = user?.email === 'ae132118@gmail.com' || user?.user_metadata?.role === 'admin';
+
   return (
     <html lang="id" suppressHydrationWarning data-scroll-behavior="smooth">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <ThemeProvider>
-          <Navbar initialUser={user} />
-          <div className="flex min-h-screen flex-col">
-            <main className="flex-1">{children}</main>
-            <Footer />
-          </div>
-          <Toaster />
-          <WhatsAppFloating />
-        </ThemeProvider>
+        <SecurityProvider isAdmin={!!isAdmin}>
+          <ThemeProvider>
+            <Navbar initialUser={user} />
+            <div className="flex min-h-screen flex-col">
+              <main className="flex-1">{children}</main>
+              <Footer />
+            </div>
+            <Toaster />
+            <WhatsAppFloating />
+          </ThemeProvider>
+        </SecurityProvider>
       </body>
     </html>
   );

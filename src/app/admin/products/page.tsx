@@ -1,11 +1,22 @@
-import { createClient } from '@/lib/supabase-server'
+import { adminSupabase } from '@/lib/supabase-admin'
 import ProductsClient from './ProductsClient'
 
 export const revalidate = 0
 
 export default async function AdminProductsPage() {
-    const supabase = await createClient()
-    const { data: products } = await supabase.rpc('get_products_with_stock')
+    const { data: products, error } = await adminSupabase
+        .from('products')
+        .select(`
+            *,
+            account_stock(count)
+        `)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false })
+
+    if (error) {
+        console.error('Admin products query error:', error)
+    }
+
     const list = (products || []) as Array<Record<string, unknown>>
     const normalized = list.map((p) => ({
         ...p,
@@ -19,3 +30,4 @@ export default async function AdminProductsPage() {
     }))
     return <ProductsClient initialProducts={normalized as any} />
 }
+

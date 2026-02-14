@@ -1,24 +1,27 @@
-import { createClient } from '@/lib/supabase-server'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { sendEmail } from '@/lib/mail'
 
-/** POST: Notify admin when user logs in. Dipanggil dari client setelah auth berhasil. */
-export async function POST() {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const adminNumber = '6285814581266'
-    const msg = `*User login F-PEDIA*\n\nEmail: ${user.email || '-'}\nWaktu: ${new Date().toLocaleString('id-ID')}`
-
+export async function POST(request: NextRequest) {
     try {
-        const url = process.env.WHATSAPP_API_URL || 'http://localhost:3001'
-        const secret = process.env.WHATSAPP_API_SECRET || process.env.WHATSAPP_API_KEY
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-        if (secret) headers['X-Api-Key'] = secret
-        await fetch(`${url}/send-notification`, { method: 'POST', headers, body: JSON.stringify({ target: adminNumber, message: msg }) })
-    } catch (e) {
-        console.error('Notify login WA error:', e)
-    }
+        const { email, time, userAgent } = await request.json()
+        const adminEmail = process.env.ADMIN_EMAIL || 'ae132118@gmail.com'
 
-    return NextResponse.json({ ok: true })
+        if (!email) return NextResponse.json({ error: 'Email required' }, { status: 400 })
+
+        await sendEmail({
+            to: adminEmail,
+            subject: `[Login Alert] User Login: ${email}`,
+            html: `
+                <h3>User Login Notification</h3>
+                <p><strong>User:</strong> ${email}</p>
+                <p><strong>Time:</strong> ${time || new Date().toLocaleString()}</p>
+                <p><strong>User Agent:</strong> ${userAgent || 'Unknown'}</p>
+            `
+        })
+
+        return NextResponse.json({ success: true })
+    } catch (error) {
+        console.error('Login Notify Error:', error)
+        return NextResponse.json({ error: 'Internal Error' }, { status: 500 })
+    }
 }

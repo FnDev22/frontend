@@ -86,6 +86,25 @@ export async function POST(request: NextRequest) {
             .single()
 
         if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+        // Broadcast email to all users
+        const discountText = data.discount_percent > 0 ? `${data.discount_percent}%` : `Rp ${data.discount_value.toLocaleString('id-ID')}`
+        const emailHtml = `
+            <h2>Promo Baru: ${data.title}</h2>
+            <p>Halo,</p>
+            <p>Dapatkan diskon spesial dengan kode promo:</p>
+            <div style="background-color: #f0f0f0; padding: 15px; border-radius: 5px; text-align: center; margin: 20px 0;">
+                <h1 style="letter-spacing: 2px; color: #333; margin: 0;">${data.code}</h1>
+                <p>Diskon: ${discountText}</p>
+            </div>
+            <p>${data.description || ''}</p>
+            <p>Gunakan kode ini saat checkout!</p>
+            <a href="${process.env.NEXT_PUBLIC_SITE_URL}" style="display: inline-block; padding: 10px 20px; background-color: #0070f3; color: white; text-decoration: none; border-radius: 5px;">Belanja Sekarang</a>
+            <p>Salam,<br/>Tim F-PEDIA</p>
+        `
+        import('@/lib/mail').then(({ broadcastEmail }) => {
+            broadcastEmail(`Promo Spesial: ${data.title}`, emailHtml)
+        })
+
         return NextResponse.json(data)
     } catch (err) {
         console.error('Admin promos POST error:', err)

@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge'
 import { Check, ShoppingCart, Star, Clock, Info, ChevronRight } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ProductReviewForm } from './ProductReviewForm'
+import { ShareButtons } from '@/components/ShareButtons'
+import { adminSupabase } from '@/lib/supabase-admin'
 
 export const revalidate = 0
 
@@ -18,12 +20,32 @@ interface Props {
 export default async function ProductPage({ params }: Props) {
     const { id } = await params
     const supabase = await createClient()
-    const { data: productRows } = await supabase.rpc('get_product_with_stock', { p_product_id: id })
-    const product = Array.isArray(productRows) ? productRows[0] : productRows
+
+    // Direct query instead of RPC (which may not exist in the database)
+    const { data: product, error: prodError } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', id)
+        .eq('is_deleted', false)
+        .maybeSingle()
 
     if (!product) {
         notFound()
     }
+
+    // Count available stock (Use admin client to bypass RLS)
+    const { count: stockCount } = await adminSupabase
+        .from('account_stock')
+        .select('*', { count: 'exact', head: true })
+        .eq('product_id', id)
+        .eq('is_sold', false)
+
+    // Count sold (Use admin client to bypass RLS)
+    const { count: soldCount } = await adminSupabase
+        .from('account_stock')
+        .select('*', { count: 'exact', head: true })
+        .eq('product_id', id)
+        .eq('is_sold', true)
 
     const { data: reviews } = await supabase
         .from('reviews')
@@ -53,10 +75,25 @@ export default async function ProductPage({ params }: Props) {
         alreadyReviewed = !!myReview
     }
 
-    const soldCount = product.sold_count ?? 0
-    const availableStock = product.available_stock ?? 0
+    const availableStock = stockCount ?? 0
+    const totalSold = soldCount ?? 0
     const minBuy = product.min_buy ?? 1
-    const canBuy = availableStock >= minBuy
+    const canPreorder = product.is_preorder ?? false
+
+    // Hybrid logic: Preorder mode only active if stock is empty (or not enough for min buy)
+    const isPreorderMode = canPreorder && availableStock < minBuy
+
+    console.log('[DEBUG-PRODUCT]', {
+        id,
+        stockCount,
+        availableStock,
+        minBuy,
+        canPreorder,
+        isPreorderMode
+    })
+
+    // Can buy if there is stock OR if preorder is valid
+    const canBuy = availableStock >= minBuy || canPreorder
 
     return (
         <div className="container px-4 py-6 sm:py-10 md:px-6 max-w-5xl mx-auto">
@@ -83,8 +120,12 @@ export default async function ProductPage({ params }: Props) {
                     <div>
                         <div className="flex flex-wrap gap-2 mb-3">
                             <Badge variant="outline" className="font-normal">{product.category}</Badge>
-                            <Badge variant="secondary">Terjual {soldCount}</Badge>
-                            <Badge variant="outline">Stok {availableStock}</Badge>
+                            <Badge variant="secondary">Terjual {totalSold}</Badge>
+                            {isPreorderMode ? (
+                                <Badge variant="default" className="bg-orange-500 hover:bg-orange-600">Pre-Order</Badge>
+                            ) : (
+                                <Badge variant="outline">Stok {availableStock}</Badge>
+                            )}
                         </div>
                         <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight leading-tight">{product.title}</h1>
                         <p className="text-xl sm:text-2xl font-bold mt-3">Rp {Number(product.price).toLocaleString('id-ID')}</p>
@@ -96,7 +137,7 @@ export default async function ProductPage({ params }: Props) {
                             <div className="rounded-lg bg-background p-2"><Clock className="h-4 w-4 text-muted-foreground" /></div>
                             <div>
                                 <p className="text-xs text-muted-foreground">Pengiriman</p>
-                                <p className="font-medium text-sm">{product.avg_delivery_time || 'Instan'}</p>
+                                <p className="font-medium text-sm">{product.avg_delivery_time || 'Instant'}</p>
                             </div>
                         </div>
                         <div className="bg-muted/80 p-4 rounded-xl flex items-center gap-3 border">
@@ -108,13 +149,16 @@ export default async function ProductPage({ params }: Props) {
                         </div>
                     </div>
 
+
+
                     <div className="flex flex-col sm:flex-row gap-3">
                         {canBuy ? (
-                            <Button asChild size="lg" className="w-full md:w-auto">
-                                <Link href={`/checkout?productId=${product.id}`}>
+                            <Button asChild size="lg" className={`w-full md:w-auto ${isPreorderMode ? 'bg-orange-500 hover:bg-orange-600' : ''}`}>
+                                {/* Use standard <a> tag to force full browser refresh on navigation to checkout */}
+                                <a href={`/checkout?productId=${product.id}`}>
                                     <ShoppingCart className="mr-2 h-5 w-5" />
-                                    Beli Sekarang
-                                </Link>
+                                    {isPreorderMode ? 'Pre-Order Sekarang' : 'Beli Sekarang'}
+                                </a>
                             </Button>
                         ) : (
                             <Button size="lg" className="w-full md:w-auto" disabled>
@@ -123,10 +167,16 @@ export default async function ProductPage({ params }: Props) {
                         )}
                     </div>
 
+                    <ShareButtons
+                        title={product.title}
+                        description={`Hanya Rp ${Number(product.price).toLocaleString('id-ID')}`}
+                        url={`${process.env.NEXT_PUBLIC_SITE_URL}/products/${product.id}`}
+                    />
+
                     <div className="rounded-xl border bg-muted/30 p-4 space-y-2 text-sm text-muted-foreground">
                         <div className="flex items-center gap-2">
                             <Check className="h-4 w-4 text-green-600 shrink-0" />
-                            <span>Pengiriman otomatis setelah pembayaran</span>
+                            <span>{isPreorderMode ? 'Dikirim setelah stok tersedia' : 'Pengiriman otomatis setelah pembayaran'}</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <Check className="h-4 w-4 text-green-600 shrink-0" />

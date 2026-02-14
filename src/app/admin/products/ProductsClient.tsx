@@ -12,7 +12,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { Plus, Pencil, Trash, Package, Upload, ImageIcon, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { getPublicStorageUrl } from '@/lib/utils'
+import { WholesalePriceInput, WholesaleTier } from './WholesalePriceInput'
+import { Switch } from '../../../components/ui/switch'
 
 export default function ProductsClient({ initialProducts }: { initialProducts: Product[] }) {
     const [products, setProducts] = useState<Product[]>(initialProducts)
@@ -48,6 +51,8 @@ export default function ProductsClient({ initialProducts }: { initialProducts: P
         min_buy: 1,
         avg_delivery_time: '',
         instructions: '',
+        wholesale_prices: [] as WholesaleTier[],
+        is_preorder: false,
     }
     const [formData, setFormData] = useState(formDataDefaults)
 
@@ -140,6 +145,8 @@ export default function ProductsClient({ initialProducts }: { initialProducts: P
             avg_delivery_time: formData.avg_delivery_time?.trim() ?? '',
             instructions: formData.instructions?.trim() ?? '',
             is_sold: false,
+            wholesale_prices: formData.wholesale_prices,
+            is_preorder: formData.is_preorder,
         }
 
         try {
@@ -281,6 +288,8 @@ export default function ProductsClient({ initialProducts }: { initialProducts: P
             min_buy: product.min_buy ?? 1,
             avg_delivery_time: product.avg_delivery_time ?? '',
             instructions: product.instructions ?? '',
+            wholesale_prices: (product.wholesale_prices as unknown as WholesaleTier[]) ?? [],
+            is_preorder: product.is_preorder ?? false,
         })
         setIsOpen(true)
     }
@@ -294,11 +303,16 @@ export default function ProductsClient({ initialProducts }: { initialProducts: P
         if (!deletingProductId) return
         setIsDeleting(true)
         try {
-            const { error } = await supabase.from('products').delete().eq('id', deletingProductId)
+            // Soft delete: update is_deleted = true
+            const { error } = await supabase
+                .from('products')
+                .update({ is_deleted: true })
+                .eq('id', deletingProductId)
+
             if (error) {
                 toast.error(error.message)
             } else {
-                toast.success('Produk dihapus')
+                toast.success('Produk dihapus (soft delete)')
                 setProducts((prev) => prev.filter((p) => p.id !== deletingProductId))
                 router.refresh()
             }
@@ -315,12 +329,17 @@ export default function ProductsClient({ initialProducts }: { initialProducts: P
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl font-bold">Products</h1>
+                <div className="flex gap-2">
+                    <Button variant="outline" asChild>
+                        <Link href="/admin/products/import">
+                            <Upload className="mr-2 h-4 w-4" /> Import Stok
+                        </Link>
+                    </Button>
+                    <Button onClick={() => { resetForm(); setIsOpen(true) }}>
+                        <Plus className="mr-2 h-4 w-4" /> Add Product
+                    </Button>
+                </div>
                 <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                    <DialogTrigger asChild>
-                        <Button onClick={resetForm}>
-                            <Plus className="mr-2 h-4 w-4" /> Add Product
-                        </Button>
-                    </DialogTrigger>
                     <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
                             <DialogTitle>{editingProduct ? 'Edit Product' : 'Add Product'}</DialogTitle>
@@ -419,6 +438,23 @@ export default function ProductsClient({ initialProducts }: { initialProducts: P
                                 <Label>Instructions (dikirim setelah pembelian)</Label>
                                 <Textarea value={formData.instructions} placeholder="Cara penggunaan akun..." onChange={(e) => setFormData({ ...formData, instructions: e.target.value })} />
                             </div>
+
+                            <div className="flex items-center space-x-2 border p-4 rounded-lg">
+                                <Switch
+                                    id="preorder"
+                                    checked={formData.is_preorder}
+                                    onCheckedChange={(checked) => setFormData({ ...formData, is_preorder: checked })}
+                                />
+                                <div className="grid gap-1.5 leading-none">
+                                    <Label htmlFor="preorder">Pre-Order System</Label>
+                                    <p className="text-sm text-muted-foreground">Aktifkan untuk produk yang stoknya belum tersedia (dikirim manual/nanti).</p>
+                                </div>
+                            </div>
+
+                            <WholesalePriceInput
+                                value={formData.wholesale_prices}
+                                onChange={(val) => setFormData({ ...formData, wholesale_prices: val })}
+                            />
 
                             {editingProduct && (
                                 <div className="border-t pt-4 space-y-4">
@@ -578,6 +614,6 @@ export default function ProductsClient({ initialProducts }: { initialProducts: P
                     </TableBody>
                 </Table>
             </div>
-        </div>
+        </div >
     )
 }

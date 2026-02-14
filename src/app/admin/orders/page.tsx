@@ -8,7 +8,7 @@ export default async function AdminOrdersPage() {
 
     const { data: orders } = await supabase
         .from('orders')
-        .select('*, product:products(*)')
+        .select('*, product:products(*), order_accounts(account_stock_id(email, password, type))')
         .order('created_at', { ascending: false })
 
     return <OrdersClient initialOrders={orders || []} />

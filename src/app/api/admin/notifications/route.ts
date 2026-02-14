@@ -33,5 +33,19 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await admin.from('notifications').insert({ title, message: message || null }).select('id, title, message, created_at').single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    // Broadcast email to all users
+    const emailHtml = `
+        <h2>${data.title}</h2>
+        <p>Halo,</p>
+        <p>Ada pesan baru untuk Anda:</p>
+        <blockquote style="border-left: 4px solid #0070f3; padding-left: 10px; margin: 10px 0; color: #555;">
+            ${data.message || 'Harap cek notifikasi di aplikasi.'}
+        </blockquote>
+        <p>Salam,<br/>Tim F-PEDIA</p>
+    `
+    import('@/lib/mail').then(({ broadcastEmail }) => {
+        broadcastEmail(data.title, emailHtml)
+    })
+
     return NextResponse.json(data)
 }

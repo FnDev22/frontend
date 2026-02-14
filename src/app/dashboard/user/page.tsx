@@ -9,9 +9,9 @@ export const revalidate = 0
 
 export default async function UserDashboard() {
     const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { user } } = await supabase.auth.getUser()
 
-    if (!session) {
+    if (!user) {
         return (
             <div className="container px-4 py-12 sm:py-16">
                 <Card className="max-w-md mx-auto border-dashed">
@@ -34,8 +34,8 @@ export default async function UserDashboard() {
 
     const { data: orders } = await supabase
         .from('orders')
-        .select('*, product:products(title, instructions)')
-        .eq('user_id', session.user.id)
+        .select('*, product:products(title, instructions, is_preorder)')
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false })
 
     const paidOrderIds = (orders || []).filter((o: { payment_status: string }) => o.payment_status === 'paid').map((o: { id: string }) => o.id)
@@ -55,7 +55,7 @@ export default async function UserDashboard() {
         }
     }
 
-    const displayName = session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Pengguna'
+    const displayName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Pengguna'
     const hasPaidOrders = (orders || []).some((o: { payment_status: string }) => o.payment_status === 'paid')
 
     return (
@@ -96,6 +96,7 @@ export default async function UserDashboard() {
                     <UserDashboardClient
                         orders={orders || []}
                         accountsByOrder={accountsByOrder}
+                        userEmail={user.email}
                     />
                 </CardContent>
             </Card>

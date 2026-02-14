@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { Check, X, Loader2 } from 'lucide-react'
+import { Check, X, Loader2, Eye } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 
 export default function OrdersClient({ initialOrders }: { initialOrders: Order[] }) {
@@ -60,39 +61,72 @@ export default function OrdersClient({ initialOrders }: { initialOrders: Order[]
                         {orders.map(order => {
                             const qty = order.quantity ?? 1
                             const amount = (order.product?.price ?? 0) * qty
+                            // @ts-ignore
+                            const accounts = order.order_accounts?.map((oa: any) => oa.account_stock_id).flat() || []
+
                             return (
-                            <TableRow key={order.id}>
-                                <TableCell className="font-mono text-xs">{order.transaction_id}<br />{new Date(order.created_at).toLocaleDateString()}</TableCell>
-                                <TableCell>
-                                    <div className="flex flex-col">
-                                        <span className="font-medium">{order.buyer_email}</span>
-                                        <span className="text-xs text-muted-foreground">{order.buyer_whatsapp}</span>
-                                    </div>
-                                </TableCell>
-                                <TableCell className="hidden lg:table-cell">{order.product?.title || '—'}</TableCell>
-                                <TableCell>{qty}</TableCell>
-                                <TableCell>Rp {amount.toLocaleString('id-ID')}</TableCell>
-                                <TableCell>
-                                    <Badge variant={order.payment_status === 'paid' ? 'default' : order.payment_status === 'failed' ? 'destructive' : 'secondary'}>
-                                        {order.payment_status.toUpperCase()}
-                                    </Badge>
-                                </TableCell>
-                                <TableCell>
-                                    {order.payment_status === 'pending' && (
-                                        <div className="flex flex-wrap gap-2">
-                                            <Button size="sm" variant="outline" className="text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleStatusUpdate(order.id, 'paid')} disabled={loading === order.id} title="Tandai lunas (jika user sudah bayar tapi gateway/webhook belum konfirmasi)">
-                                                {loading === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                                                Lunas
-                                            </Button>
-                                            <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleStatusUpdate(order.id, 'failed')} disabled={loading === order.id} title="Tandai gagal (batal / user error)">
-                                                {loading === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
-                                                Gagal
-                                            </Button>
+                                <TableRow key={order.id}>
+                                    <TableCell className="font-mono text-xs">{order.transaction_id}<br />{new Date(order.created_at).toLocaleDateString()}</TableCell>
+                                    <TableCell>
+                                        <div className="flex flex-col">
+                                            <span className="font-medium">{order.buyer_email}</span>
+                                            <span className="text-xs text-muted-foreground">{order.buyer_whatsapp}</span>
                                         </div>
-                                    )}
-                                </TableCell>
-                            </TableRow>
-                        )})}
+                                    </TableCell>
+                                    <TableCell className="hidden lg:table-cell">{order.product?.title || '—'}</TableCell>
+                                    <TableCell>{qty}</TableCell>
+                                    <TableCell>Rp {amount.toLocaleString('id-ID')}</TableCell>
+                                    <TableCell>
+                                        <Badge variant={order.payment_status === 'paid' ? 'default' : order.payment_status === 'failed' ? 'destructive' : 'secondary'}>
+                                            {order.payment_status.toUpperCase()}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                        {order.payment_status === 'pending' && (
+                                            <div className="flex flex-wrap gap-2">
+                                                <Button size="sm" variant="outline" className="text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleStatusUpdate(order.id, 'paid')} disabled={loading === order.id} title="Tandai lunas (jika user sudah bayar tapi gateway/webhook belum konfirmasi)">
+                                                    {loading === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                                                    Lunas
+                                                </Button>
+                                                <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleStatusUpdate(order.id, 'failed')} disabled={loading === order.id} title="Tandai gagal (batal / user error)">
+                                                    {loading === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                                                    Gagal
+                                                </Button>
+                                            </div>
+                                        )}
+                                        {order.payment_status === 'paid' && accounts.length > 0 && (
+                                            <Dialog>
+                                                <DialogTrigger asChild>
+                                                    <Button size="sm" variant="outline" className="gap-2">
+                                                        <Eye className="h-4 w-4" />
+                                                        Akun
+                                                    </Button>
+                                                </DialogTrigger>
+                                                <DialogContent>
+                                                    <DialogHeader>
+                                                        <DialogTitle>Detail Akun Terkirim</DialogTitle>
+                                                    </DialogHeader>
+                                                    <div className="space-y-4">
+                                                        {accounts.map((acc: any, idx: number) => (
+                                                            <div key={idx} className="p-3 bg-muted rounded-md text-sm font-mono">
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-muted-foreground">Email:</span>
+                                                                    <span className="select-all">{acc.email}</span>
+                                                                </div>
+                                                                <div className="flex justify-between mt-1">
+                                                                    <span className="text-muted-foreground">Pass:</span>
+                                                                    <span className="select-all">{acc.password}</span>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </DialogContent>
+                                            </Dialog>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            )
+                        })}
                     </TableBody>
                 </Table>
             </div>

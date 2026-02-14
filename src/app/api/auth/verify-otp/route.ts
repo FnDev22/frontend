@@ -13,20 +13,20 @@ function normalizePhone(phone: string) {
 
 export async function POST(request: NextRequest) {
     try {
-        const { phone, code, purpose } = await request.json()
+        const { phone, email, code, purpose } = await request.json()
 
-        if (!phone || !code || !purpose) {
-            return NextResponse.json({ error: 'Phone, code, and purpose required' }, { status: 400 })
+        if ((!phone && !email) || !code || !purpose) {
+            return NextResponse.json({ error: 'Phone/Email, code, and purpose required' }, { status: 400 })
         }
 
-        const normalizedPhone = normalizePhone(phone)
+        const identifier = email ? email.trim().toLowerCase() : normalizePhone(phone)
         const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
         // Check OTP
         const { data, error } = await adminSupabase
             .from('otp_codes')
             .select('*')
-            .eq('phone', normalizedPhone)
+            .eq('phone', identifier)
             .eq('code', code)
             .eq('purpose', purpose)
             .gt('expires_at', new Date().toISOString()) // Not expired

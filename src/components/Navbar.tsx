@@ -9,7 +9,7 @@ import { type User } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription, SheetHeader, SheetFooter } from '@/components/ui/sheet'
 import { Menu, ShoppingBag, Sun, Moon, LayoutDashboard, Package, ShoppingCart, Users, LogOut, Home } from 'lucide-react'
 import { Profile } from '@/types'
 import { NotificationBell } from '@/components/NotificationBell'
@@ -38,6 +38,7 @@ export function Navbar({ initialUser }: NavbarProps) {
         created_at: new Date().toISOString(),
     } : null)
     const [mounted, setMounted] = useState(false)
+    const [sheetOpen, setSheetOpen] = useState(false)
     const router = useRouter()
     const { theme, setTheme, resolvedTheme } = useTheme()
     const logoSrc = mounted && resolvedTheme === 'light' ? '/logo2.png' : '/logo.png'
@@ -90,6 +91,7 @@ export function Navbar({ initialUser }: NavbarProps) {
     const handleLogout = async () => {
         await supabase.auth.signOut()
         setUser(null)
+        setSheetOpen(false)
         router.push('/login')
     }
 
@@ -193,65 +195,89 @@ export function Navbar({ initialUser }: NavbarProps) {
                         <Moon className="h-5 w-5 hidden dark:block" />
                     </Button>
                     {user && <NotificationBell />}
-                    <Sheet>
+                    <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
                         <SheetTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-10 w-10" aria-label="Menu">
                                 <Menu className="h-6 w-6" />
                             </Button>
                         </SheetTrigger>
-                        <SheetContent side="right" className="w-[min(100vw-2rem,320px)] overflow-y-auto">
-                            <nav className="grid gap-1 py-4">
-                                <Link href="/" className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium hover:bg-muted">
-                                    <Home className="h-4 w-4" />
-                                    Home
-                                </Link>
-                                {user ? (
-                                    <>
-                                        <div className="px-3 py-2 border-b">
-                                            <p className="text-sm font-medium truncate">{user.full_name || 'Profil'}</p>
-                                            <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                        <SheetContent side="bottom" className="max-h-[85vh] h-auto rounded-t-xl px-0 pb-0 flex flex-col">
+                            <SheetHeader className="px-5 py-4 border-b text-left">
+                                <SheetTitle className="text-xl font-bold">Menu</SheetTitle>
+                                <SheetDescription className="sr-only">Navigasi mobile</SheetDescription>
+                            </SheetHeader>
+
+                            <div className="flex-1 overflow-y-auto py-4 px-5">
+                                <nav className="flex flex-col gap-4">
+                                    {/* Links Layout */}
+                                    {/* Example links from screenshot style - Clean list with arrows */}
+
+                                    <Link href="/" onClick={() => setSheetOpen(false)} className="flex items-center justify-between text-base font-medium text-foreground py-2 border-b border-border/40">
+                                        <span>Home</span>
+                                        <Home className="h-4 w-4 text-muted-foreground" />
+                                    </Link>
+
+                                    {user ? (
+                                        <>
+                                            <div className="py-2 border-b border-border/40">
+                                                <p className="text-sm font-medium">{user.full_name || 'Profil'}</p>
+                                                <p className="text-xs text-muted-foreground">{user.email}</p>
+                                            </div>
+
+                                            <Link href="/dashboard/user" onClick={() => setSheetOpen(false)} className="flex items-center justify-between text-base font-medium text-foreground py-2 border-b border-border/40">
+                                                <span>Dashboard Saya</span>
+                                                <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
+                                            </Link>
+
+                                            {(user.role === 'admin' || user.email === ADMIN_EMAIL) && (
+                                                <>
+                                                    <div className="pt-4 pb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                                        Admin Area
+                                                    </div>
+                                                    <Link href="/admin/dashboard" onClick={() => setSheetOpen(false)} className="flex items-center justify-between text-base font-medium text-foreground py-2 border-b border-border/40">
+                                                        <span>Dashboard Admin</span>
+                                                        <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
+                                                    </Link>
+                                                    <Link href="/admin/products" onClick={() => setSheetOpen(false)} className="flex items-center justify-between text-base font-medium text-foreground py-2 border-b border-border/40">
+                                                        <span>Produk</span>
+                                                        <Package className="h-4 w-4 text-muted-foreground" />
+                                                    </Link>
+                                                    <Link href="/admin/orders" onClick={() => setSheetOpen(false)} className="flex items-center justify-between text-base font-medium text-foreground py-2 border-b border-border/40">
+                                                        <span>Pesanan</span>
+                                                        <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                                                    </Link>
+                                                    <Link href="/admin/users" onClick={() => setSheetOpen(false)} className="flex items-center justify-between text-base font-medium text-foreground py-2 border-b border-border/40">
+                                                        <span>Pengguna</span>
+                                                        <Users className="h-4 w-4 text-muted-foreground" />
+                                                    </Link>
+                                                </>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <div className="py-4 text-center text-muted-foreground text-sm">
+                                            Silakan login untuk akses penuh.
                                         </div>
-                                        <Link href="/dashboard/user" className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium hover:bg-muted">
-                                            <LayoutDashboard className="h-4 w-4" />
-                                            Dashboard Saya
-                                        </Link>
-                                        {(user.role === 'admin' || user.email === ADMIN_EMAIL) && (
-                                            <>
-                                                <p className="px-3 pt-2 text-xs text-muted-foreground">Admin</p>
-                                                <Link href="/admin/dashboard" className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium hover:bg-muted">
-                                                    <LayoutDashboard className="h-4 w-4" />
-                                                    Dashboard Admin
-                                                </Link>
-                                                <Link href="/admin/products" className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium hover:bg-muted">
-                                                    <Package className="h-4 w-4" />
-                                                    Produk
-                                                </Link>
-                                                <Link href="/admin/orders" className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium hover:bg-muted">
-                                                    <ShoppingCart className="h-4 w-4" />
-                                                    Pesanan
-                                                </Link>
-                                                <Link href="/admin/users" className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium hover:bg-muted">
-                                                    <Users className="h-4 w-4" />
-                                                    Pengguna
-                                                </Link>
-                                            </>
-                                        )}
-                                        <Button variant="outline" onClick={handleLogout} className="justify-start w-full mt-2 h-11 gap-2">
-                                            <LogOut className="h-4 w-4" />
-                                            Logout
-                                        </Button>
-                                    </>
+                                    )}
+                                </nav>
+                            </div>
+
+                            {/* Bottom Fixed Buttons */}
+                            <div className="p-5 border-t bg-background mt-auto">
+                                {user ? (
+                                    <Button variant="default" onClick={handleLogout} className="w-full h-11 text-base font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
+                                        Logout
+                                    </Button>
                                 ) : (
-                                    <>
-                                        <Link href="/login" className="flex items-center rounded-lg px-3 py-2.5 text-sm font-medium hover:bg-muted">
-                                            Login
-                                        </Link>
-                                        <Link href="/register" className="flex items-center rounded-lg px-3 py-2.5 text-sm font-medium hover:bg-muted">
-                                            Daftar
-                                        </Link>
-                                    </>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <Button variant="secondary" onClick={() => setSheetOpen(false)} asChild className="h-11 text-base font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg">
+                                            <Link href="/login">Masuk</Link>
+                                        </Button>
+                                        <Button onClick={() => setSheetOpen(false)} asChild className="h-11 text-base font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
+                                            <Link href="/register">Daftar</Link>
+                                        </Button>
+                                    </div>
                                 )}
-                            </nav>
+                            </div>
                         </SheetContent>
                     </Sheet>
                 </div>

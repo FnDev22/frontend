@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { enqueueWhatsAppMessage } from '@/lib/whatsapp-queue'
+import { decrypt } from '@/lib/crypto'
 
 /** 08xxx / +62 -> 62xxx untuk WA */
 function normalizePhone(input: string | null | undefined): string | null {
@@ -54,7 +55,7 @@ export async function confirmOrderPaid(
             const raw = oa.account_stock_id
             const a = Array.isArray(raw) ? raw[0] : raw
             if (!a) return null
-            return `${i + 1}. Email: ${a.email}\n   Password: ${a.password}`
+            return `${i + 1}. Email: ${decrypt(a.email)}\n   Password: ${decrypt(a.password)}`
         })
         .filter(Boolean)
         .join('\n\n')
@@ -74,6 +75,58 @@ export async function confirmOrderPaid(
         message += `Terima kasih telah mempercayakan F-PEDIA.`
 
         await enqueueWhatsAppMessage(supabaseAdmin, buyerWa, message)
+    }
+
+    // Email Notification to Admin (Payment Received)
+    const { sendEmail } = await import('@/lib/mail')
+    const adminEmail = process.env.ADMIN_EMAIL || 'ae132118@gmail.com'
+    await sendEmail({
+        to: adminEmail,
+        subject: `[Payment Received] ${order.transaction_id} - ${order.product?.title}`,
+        html: `
+            <h3>Pembayaran Diterima</h3>
+            <p><strong>Order ID:</strong> ${order.transaction_id}</p>
+            <p><strong>Produk:</strong> ${order.product?.title}</p>
+            <p><strong>Jumlah:</strong> ${quantity}</p>
+            <p><strong>Total:</strong> Rp ${Number(order.total_price).toLocaleString('id-ID')}</p>
+            <p><strong>Customer:</strong> ${order.buyer_email} (${order.buyer_whatsapp})</p>
+            <p><strong>Status:</strong> Lunas (Paid)</p>
+            <p><strong>Akun Terkirim:</strong></p>
+            <pre>${accountsList}</pre>
+        `
+    }).catch(err => console.error('Failed to send admin payment email', err))
+
+    // Check for Low Stock and Notify Admin
+    try {
+        const { data: currentStock } = await supabaseAdmin.rpc('get_available_stock', { product_uuid: order.product_id })
+        const stock = typeof currentStock === 'number' ? currentStock : 0
+        const LOW_STOCK_THRESHOLD = 5
+
+        if (stock < LOW_STOCK_THRESHOLD) {
+            const adminEmail = process.env.ADMIN_EMAIL || 'ae132118@gmail.com'
+            const { sendEmail } = await import('@/lib/mail')
+            await sendEmail({
+                to: adminEmail,
+                subject: `[LOW STOCK] ${order.product?.title} - Sisa ${stock}`,
+                html: `
+                    <h3 style="color: red;">Peringatan Stok Menipis</h3>
+                    <p>Produk <strong>${order.product?.title}</strong> tersisa <strong>${stock}</strong> unit.</p>
+                    <p>Segera restock untuk menghindari kehabisan stok.</p>
+                    <p><a href="${process.env.NEXT_PUBLIC_SITE_URL}/admin/products">Kelola Stok</a></p>
+                `
+            })
+
+            // Optional: WA Notification for Low Stock
+            /*
+            const adminNumberRaw = process.env.ADMIN_WHATSAPP_NUMBER || '6285814581266'
+            const adminNumber = normalizePhone(adminNumberRaw)
+            if (adminNumber) {
+                await enqueueWhatsAppMessage(supabaseAdmin, adminNumber, `*LOW STOCK ALERT*\n\nProduk: ${order.product?.title}\nSisa: ${stock} unit\n\nSegera restock!`)
+            }
+            */
+        }
+    } catch (e) {
+        console.error('Failed to check low stock', e)
     }
 
     return { ok: true }
