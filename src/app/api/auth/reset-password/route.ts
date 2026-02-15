@@ -20,17 +20,28 @@ export async function POST(request: NextRequest) {
         })
 
         // 1. Verify OTP
+        // 1. Verify OTP
         const { data: otpData, error: otpError } = await adminSupabase
             .from('otp_codes')
             .select('*')
-            .eq('phone', email) // 'phone' column used for identifier (email)
+            .eq('phone', email)
             .eq('code', otpCode)
             .eq('purpose', 'reset_password')
-            .gt('expires_at', new Date().toISOString())
+            .order('created_at', { ascending: false })
+            .limit(1)
             .maybeSingle()
 
         if (otpError || !otpData) {
-            return NextResponse.json({ error: 'Kode OTP salah atau kadaluarsa' }, { status: 400 })
+            console.error('Reset Password OTP Error:', otpError || 'No OTP found')
+            return NextResponse.json({ error: 'Kode OTP salah atau tidak ditemukan' }, { status: 400 })
+        }
+
+        // Check Expiration
+        const now = new Date()
+        const expiresAt = new Date(otpData.expires_at)
+        if (now > expiresAt) {
+            console.log('Reset Password OTP Expired:', { now, expiresAt })
+            return NextResponse.json({ error: 'Kode OTP sudah kadaluarsa' }, { status: 400 })
         }
 
         // 2. Find User ID by Email
