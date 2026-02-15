@@ -38,8 +38,9 @@ export default async function RootLayout({
 }>) {
   const supabase = await createClient();
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
 
   const isAdmin = user?.email === 'ae132118@gmail.com' || user?.user_metadata?.role === 'admin';
 

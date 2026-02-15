@@ -31,7 +31,8 @@ const TypewriterText = ({ text }: { text: string }) => {
 
 export default async function Home() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
   const { data: productsData } = await adminSupabase
     .from('products')
     .select('*, account_stock(count)')
