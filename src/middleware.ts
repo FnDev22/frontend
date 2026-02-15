@@ -12,7 +12,10 @@ export async function middleware(request: NextRequest) {
     const isMaintenanceMode = process.env.MAINTENANCE_MODE === 'true'
 
     // Allow access to maintenance page itself and static assets
-    if (isMaintenanceMode && !path.startsWith('/maintenance') && !path.startsWith('/_next') && !path.startsWith('/api/')) {
+    // Also allow common image/font extensions if they are in public folder
+    const isStaticAsset = /\.(png|jpg|jpeg|gif|svg|ico|webp|woff|woff2|ttf|eot)$/i.test(path)
+
+    if (isMaintenanceMode && !path.startsWith('/maintenance') && !path.startsWith('/_next') && !path.startsWith('/api/') && !isStaticAsset) {
         // Check for Admin Bypass Cookie
         // Note: In a real scenario, you might want a more secure bypass token.
         // For now, we rely on the session cookie if available, or a specific admin_access cookie.
