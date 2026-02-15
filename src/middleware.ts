@@ -32,6 +32,9 @@ export async function middleware(request: NextRequest) {
     const requestHeaders = new Headers(request.headers)
     requestHeaders.set('x-nonce', nonce)
     requestHeaders.set('Content-Security-Policy', cspHeader)
+    requestHeaders.set('X-Content-Type-Options', 'nosniff')
+    requestHeaders.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+    requestHeaders.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
 
     // Skip auth-related callbacks entirely but apply CSP
     if (path === '/auth/callback' || path.startsWith('/api/auth/')) {
@@ -41,6 +44,9 @@ export async function middleware(request: NextRequest) {
             },
         })
         response.headers.set('Content-Security-Policy', cspHeader)
+        response.headers.set('X-Content-Type-Options', 'nosniff')
+        response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+        response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
         return response
     }
 
@@ -53,6 +59,9 @@ export async function middleware(request: NextRequest) {
             },
         })
         response.headers.set('Content-Security-Policy', cspHeader)
+        response.headers.set('X-Content-Type-Options', 'nosniff')
+        response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+        response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
         return response
     }
 
@@ -60,6 +69,9 @@ export async function middleware(request: NextRequest) {
         request: { headers: requestHeaders },
     })
     response.headers.set('Content-Security-Policy', cspHeader)
+    response.headers.set('X-Content-Type-Options', 'nosniff')
+    response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+    response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
 
     const supabase = createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -77,6 +89,9 @@ export async function middleware(request: NextRequest) {
                         request: { headers: requestHeaders },
                     })
                     response.headers.set('Content-Security-Policy', cspHeader)
+                    response.headers.set('X-Content-Type-Options', 'nosniff')
+                    response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+                    response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
                     cookiesToSet.forEach(({ name, value, options }) =>
                         response.cookies.set(name, value, options)
                     )
