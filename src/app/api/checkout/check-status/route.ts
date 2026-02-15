@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 
     const { data: order } = await supabaseAdmin
         .from('orders')
-        .select('id, payment_status, quantity, product:products(price)')
+        .select('id, payment_status, quantity, total_price, product:products(price)')
         .eq('transaction_id', orderId.trim())
         .single()
 
@@ -35,10 +35,9 @@ export async function GET(request: NextRequest) {
 
     const slug = process.env.PAKASIR_PROJECT_SLUG
     const apiKey = process.env.PAKASIR_API_KEY
-    const product = order.product as { price?: number } | null
-    const price = product?.price ?? 0
-    const quantity = order.quantity ?? 1
-    const amount = price * quantity
+
+    // Use stored total_price from order to ensure consistency
+    const amount = Number(order.total_price) || 0
 
     if (!slug || !apiKey) {
         return NextResponse.json({ paid: false, error: 'Payment gateway not configured' }, { status: 200 })

@@ -3,6 +3,16 @@ import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 
 export async function POST(request: NextRequest) {
     try {
+        const ip = request.headers.get('x-forwarded-for') || 'unknown-ip'
+        const ua = request.headers.get('user-agent') || 'unknown-ua'
+        const { checkRateLimit } = await import('@/lib/rate-limit')
+
+        // Rate Limit: 10 attempts per minute per IP+UA to prevent brute force
+        const limitCheck = await checkRateLimit(`promo:${ip}:${ua}`, 10, 60)
+        if (!limitCheck.success) {
+            return NextResponse.json({ error: limitCheck.message }, { status: 429 })
+        }
+
         const { code } = await request.json()
         if (!code) {
             return NextResponse.json({ error: 'Kode promo required' }, { status: 400 })

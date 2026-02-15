@@ -32,7 +32,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
     }
 
-    const { productId, fullName, email, whatsapp, note, promo_text: promoText, promo_discount_percent: discountPercent = 0, promo_discount_value: discountValue = 0, quantity: qty = 1 } = body
+    const { productId, fullName, email, whatsapp, note, promo_code: promoCode, quantity: qty = 1 } = body
     const quantity = Math.max(1, parseInt(String(qty), 10) || 1)
 
     // 2. Verify Environment Variables
@@ -85,13 +85,37 @@ export async function POST(request: Request) {
     const orderId = `INV-${Date.now()}-${Math.floor(Math.random() * 1000)}`
     const rawSubtotal = Number(product.price) * quantity
 
-    // Apply promo discount
+    // Apply promo discount (Server-Side Validation)
     let discount = 0
-    if (discountPercent > 0) {
-        discount = Math.round(rawSubtotal * discountPercent / 100)
-    } else if (discountValue > 0) {
-        discount = Math.min(discountValue, rawSubtotal) // Don't exceed subtotal
+    let promoText = null
+
+    if (promoCode && typeof promoCode === 'string') {
+        const { data: promo, error: promoError } = await adminSupabase
+            .from('promos')
+            .select('*')
+            .eq('code', promoCode.toUpperCase())
+            .eq('is_active', true)
+            .maybeSingle()
+
+        const now = new Date().toISOString()
+
+        if (promo && !promoError) {
+            // Validate Date
+            const isValidDate = (!promo.valid_from || now >= promo.valid_from) &&
+                (!promo.valid_until || now <= promo.valid_until)
+
+            if (isValidDate) {
+                if (promo.discount_percent > 0) {
+                    discount = Math.round(rawSubtotal * promo.discount_percent / 100)
+                    promoText = `Diskon ${promo.discount_percent}% (Kode: ${promoCode})`
+                } else if (promo.discount_value > 0) {
+                    discount = Math.min(promo.discount_value, rawSubtotal)
+                    promoText = `Diskon Rp ${promo.discount_value.toLocaleString('id-ID')} (Kode: ${promoCode})`
+                }
+            }
+        }
     }
+
     const subtotal = Math.max(0, rawSubtotal - discount)
 
     // Pakasir: biaya pembayaran ditanggung pembeli; response berisi fee & total_payment

@@ -13,6 +13,13 @@ export async function POST(request: NextRequest) {
 
         const supabase = await createClient()
 
+        // Security: Admin Check
+        const { data: { user } } = await supabase.auth.getUser()
+        const adminEmail = process.env.ADMIN_EMAIL || 'ae132118@gmail.com'
+        if (!user || user.email !== adminEmail) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+
         // Encrypt passwords before storing
         const stockData = accounts.map((acc: any) => ({
             product_id: productId,

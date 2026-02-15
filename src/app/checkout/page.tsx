@@ -189,9 +189,7 @@ function CheckoutContent() {
                     email,
                     whatsapp,
                     note,
-                    promo_text: promoText.trim() || undefined,
-                    promo_discount_percent: promoDiscount?.percent || 0,
-                    promo_discount_value: promoDiscount?.value || 0,
+                    promo_code: promoDiscount ? promoText.trim() : undefined,
                     quantity,
                 }),
             })

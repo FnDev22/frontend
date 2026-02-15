@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
         const { data: otpData, error: otpError } = await adminSupabase
             .from('otp_codes')
             .select('*')
-            .eq('phone', email.trim().toLowerCase()) // 'phone' column stores the identifier (email/phone)
+            .eq('phone', email.trim().toLowerCase()) // Alert: 'phone' column is reused for email/identifier in this schema
             .eq('code', otp_code)
             .eq('purpose', 'register')
             .order('created_at', { ascending: false })

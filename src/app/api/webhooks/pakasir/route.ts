@@ -42,19 +42,24 @@ export async function POST(request: NextRequest) {
 
         // Validate amount if present in webhook and database
         if (amount && order.total_price) {
-            // Allow small difference for floating point or fee variations (optional tolerance)
-            // But ideally should match exactly or within very small margin
             const dbTotal = Number(order.total_price)
             const webhookAmount = Number(amount)
 
-            if (Math.abs(dbTotal - webhookAmount) > 100) { // Tolerance Rp 100
+            // Strict check: amount must match exactly
+            if (dbTotal !== webhookAmount) {
                 console.error(`Pakasir webhook: amount mismatch. Webhook: ${webhookAmount}, DB: ${dbTotal}`)
-                // Optional: reject processed status if amount mismatch
-                // return NextResponse.json({ error: 'Amount mismatch' }, { status: 400 })
-                // For now, we just log and proceed, or you can choose to stop.
-                // Let's be strict:
                 return NextResponse.json({ error: 'Amount mismatch' }, { status: 400 })
             }
+        }
+
+        // Security: Verify 'api_key' if provided in body to ensure it comes from Pakasir
+        // (Assuming Pakasir sends back the API key or signed payload - check documentation/logs if available)
+        // If not, we rely on the secret URL or assume 'order_id' knowledge is enough + amount check.
+        // For now, if body has api_key, we verify it.
+        const bodyApiKey = (body as any).api_key
+        if (bodyApiKey && bodyApiKey !== process.env.PAKASIR_API_KEY) {
+            console.error('Pakasir webhook: Invalid API Key provided in body')
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
         const result = await confirmOrderPaid(supabaseAdmin, order.id)

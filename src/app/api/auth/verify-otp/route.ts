@@ -19,6 +19,18 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Phone/Email, code, and purpose required' }, { status: 400 })
         }
 
+        // Rate Limiting: 5 attempts per 10 minutes
+        const ip = request.headers.get('x-forwarded-for') || 'unknown-ip'
+        const ua = request.headers.get('user-agent') || 'unknown-ua'
+        const { checkRateLimit } = await import('@/lib/rate-limit')
+
+        // Key concept from rentan.md: Combine IP + UA to prevent simple IP spoofing bypass
+        const limitCheck = await checkRateLimit(`otp:${ip}:${ua}`, 5, 600)
+
+        if (!limitCheck.success) {
+            return NextResponse.json({ error: limitCheck.message }, { status: 429 })
+        }
+
         const identifier = email ? email.trim().toLowerCase() : normalizePhone(phone)
         const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
@@ -33,16 +45,8 @@ export async function POST(request: NextRequest) {
             .limit(1)
             .maybeSingle()
 
-        // DEBUG OTP VERIFICATION
-        const now = new Date()
-        console.log('[Verify OTP] Checking:', { identifier, code, purpose })
-        console.log('[Verify OTP] Current Server Time:', now.toISOString())
-        if (data) {
-            console.log('[Verify OTP] Found Record:', data)
-            console.log('[Verify OTP] Expires At:', data.expires_at)
-        } else {
-            console.log('[Verify OTP] No record found for criteria')
-        }
+        // DEBUG: Removed PII logs (Security Hardening)
+        console.log('[Verify OTP] Checking for identifier:', identifier.replace(/(.{3})(.*)(@.*)/, '$1***$3')) // Masked Log instead
 
         if (error) {
             console.error('Verify OTP Error:', error)
@@ -54,9 +58,10 @@ export async function POST(request: NextRequest) {
         }
 
         // Check Expiration in JS (Safer for Timezones)
+        const now = new Date()
         const expiresAt = new Date(data.expires_at)
         if (now > expiresAt) {
-            console.log('[Verify OTP] Expired! Now > ExpiresAt')
+            console.log('[Verify OTP] Expired!')
             return NextResponse.json({ valid: false, error: 'Kode OTP sudah kadaluarsa (Expired)' }, { status: 400 })
         }
 

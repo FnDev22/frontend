@@ -66,28 +66,19 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: error.message, code: error.code }, { status: 400 })
         }
 
-        // Broadcast email to all users
+        // Broadcast email to all users - DISABLED for security (Spam Risk)
+        /*
         const emailHtml = `
             <h2>Produk Baru Tersedia: ${inserted.title}</h2>
-            <p>Halo,</p>
-            <p>Kami baru saja menambahkan produk baru yang mungkin Anda sukai:</p>
-            <div style="border: 1px solid #ccc; padding: 10px; border-radius: 5px; margin: 10px 0;">
-                <img src="${inserted.image_url}" alt="${inserted.title}" style="max-width: 100%; height: auto; max-height: 200px; object-fit: cover;" />
-                <h3>${inserted.title}</h3>
-                <p>Harga: Rp ${inserted.price.toLocaleString('id-ID')}</p>
-                <p>${inserted.description}</p>
-                <a href="${process.env.NEXT_PUBLIC_SITE_URL}/products/${inserted.id}" style="display: inline-block; padding: 10px 20px; background-color: #0070f3; color: white; text-decoration: none; border-radius: 5px;">Lihat Produk</a>
-            </div>
-            <p>Stok terbatas, segera order sebelum kehabisan!</p>
-            <p>Salam,<br/>Tim F-PEDIA</p>
+            ...
         `
-        // MUST await on Vercel or the function will be killed before email is sent
         try {
             const { broadcastEmail } = await import('@/lib/mail')
             await broadcastEmail(`Produk Baru: ${inserted.title}`, emailHtml)
         } catch (emailError) {
             console.error('Failed to broadcast email:', emailError)
         }
+        */
 
         return NextResponse.json({
             ...inserted,
@@ -111,8 +102,22 @@ export async function PATCH(request: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        const body = await request.json()
-        const { id, ...rest } = body
+        const {
+            id,
+            title,
+            description,
+            price,
+            category,
+            image_url,
+            min_buy,
+            avg_delivery_time,
+            instructions,
+            wholesale_prices,
+            is_preorder,
+            is_sold,
+            is_deleted
+        } = await request.json()
+
         if (!id) {
             return NextResponse.json({ error: 'Product id is required' }, { status: 400 })
         }
@@ -123,9 +128,24 @@ export async function PATCH(request: NextRequest) {
             { auth: { persistSession: false, autoRefreshToken: false } }
         )
 
+        // Construct update object explicitly to avoid mass assignment
+        const updates: any = {}
+        if (title !== undefined) updates.title = title
+        if (description !== undefined) updates.description = description
+        if (price !== undefined) updates.price = Number(price)
+        if (category !== undefined) updates.category = category
+        if (image_url !== undefined) updates.image_url = image_url
+        if (min_buy !== undefined) updates.min_buy = Number(min_buy)
+        if (avg_delivery_time !== undefined) updates.avg_delivery_time = avg_delivery_time
+        if (instructions !== undefined) updates.instructions = instructions
+        if (wholesale_prices !== undefined) updates.wholesale_prices = wholesale_prices
+        if (is_preorder !== undefined) updates.is_preorder = is_preorder
+        if (is_sold !== undefined) updates.is_sold = is_sold
+        if (is_deleted !== undefined) updates.is_deleted = is_deleted
+
         const { error } = await supabaseAdmin
             .from('products')
-            .update(rest)
+            .update(updates)
             .eq('id', id)
 
         if (error) {

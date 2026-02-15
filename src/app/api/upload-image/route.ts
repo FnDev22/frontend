@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase-server'
 
 const IMGBB_UPLOAD_URL = 'https://api.imgbb.com/1/upload'
 const UPLOAD_TIMEOUT_MS = 60_000
 
 export async function POST(request: NextRequest) {
     try {
+        const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+
+        if (!user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+
         const apiKey = process.env.IMGBB_API_KEY || process.env.NEXT_PUBLIC_IMGBB_API_KEY
         if (!apiKey) {
             return NextResponse.json({ error: 'IMGBB_API_KEY not configured' }, { status: 500 })
@@ -63,8 +71,8 @@ export async function POST(request: NextRequest) {
         const message = isTimeout
             ? 'Koneksi ke layanan gambar timeout. Coba lagi atau gunakan URL gambar.'
             : err instanceof Error
-              ? err.message
-              : 'Upload gagal'
+                ? err.message
+                : 'Upload gagal'
         return NextResponse.json({ error: message }, { status: 500 })
     }
 }

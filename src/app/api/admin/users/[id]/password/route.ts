@@ -19,6 +19,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
         const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
+        // 1. Authenticate that the REQUESTER is the Admin
+        const authHeader = request.headers.get('Authorization')
+        if (!authHeader) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+        const token = authHeader.replace('Bearer ', '')
+        const { data: { user }, error: authError } = await adminSupabase.auth.getUser(token)
+
+        const adminEmail = process.env.ADMIN_EMAIL || 'ae132118@gmail.com'
+        if (authError || !user || user.email !== adminEmail) {
+            return NextResponse.json({ error: 'Unauthorized: Admin access required' }, { status: 401 })
+        }
+
         // Update user
         const { error } = await adminSupabase.auth.admin.updateUserById(
             id,

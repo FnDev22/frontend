@@ -12,7 +12,9 @@ export async function POST(request: NextRequest) {
         }
 
         const ip = request.headers.get('x-forwarded-for') || 'Unknown IP'
-        const userAgent = request.headers.get('user-agent') || 'Unknown Device'
+        // Sanitize User-Agent
+        const rawUA = request.headers.get('user-agent') || 'Unknown Device'
+        const userAgent = rawUA.substring(0, 255).replace(/[<>]/g, '')
 
         // Parse user agent
         const parser = new UAParser(userAgent)
