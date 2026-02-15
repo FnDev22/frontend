@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useTheme } from 'next-themes'
 import { supabase } from '@/lib/supabase'
 import { type User } from '@supabase/supabase-js'
@@ -53,21 +53,32 @@ export function Navbar({ initialUser }: NavbarProps) {
         created_at: new Date().toISOString(),
     })
 
+    // Use ref to track current user ID to avoid effect re-runs/cleanup loops
+    // Actually useRef is better for mutable tracking without re-render, but we want state for UI.
+    // Let's use a real ref for the CHECK inside the callback.
+    const lastUserId = useRef<string | undefined>(initialUser?.id)
+
     useEffect(() => {
         setMounted(true)
 
-        // Optimasi: Hanya gunakan onAuthStateChange. Event 'INITIAL_SESSION' akan fire saat mount
-        // jika session ada, sehingga kita tidak perlu panggil getUser() manual yang berpotensi race condition.
         const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-            if (session?.user) {
-                // Cek apakah user berubah untuk menghindari fetch berulang jika session refresh token
-                if (user?.id === session.user.id) return
+            const currentSessionId = session?.user?.id
 
+            // Check against ref to avoid dependency on 'user' state
+            if (currentSessionId === lastUserId.current && event !== 'SIGNED_OUT') {
+                return
+            }
+
+            lastUserId.current = currentSessionId
+
+            if (session?.user) {
                 const { data: profile } = await supabase
                     .from('profiles')
                     .select('*')
                     .eq('id', session.user.id)
                     .maybeSingle()
+
+                // Update state
                 setUser(profile ?? profileFromAuth(session.user))
             } else {
                 setUser(null)
@@ -77,7 +88,7 @@ export function Navbar({ initialUser }: NavbarProps) {
         return () => {
             authListener.subscription.unsubscribe()
         }
-    }, [user?.id])
+    }, [])
 
     const handleLogout = async () => {
         try {
