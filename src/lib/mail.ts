@@ -8,7 +8,11 @@ const transporter = nodemailer.createTransport({
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
     },
-    pool: true, // use connection pool
+    tls: {
+        rejectUnauthorized: false
+    },
+    debug: true, // show debug output
+    logger: true // log information in console
 })
 
 export type EmailPayload = {
