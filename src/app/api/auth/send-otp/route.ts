@@ -27,10 +27,24 @@ export async function POST(request: NextRequest) {
 
         const isEmail = !!email
         const identifier = isEmail ? email.trim().toLowerCase() : normalizePhone(phone)
+
+        // Rate Limiter: 10 requests per minute
+        const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString()
+        const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        const { count, error: countError } = await adminSupabase
+            .from('otp_codes')
+            .select('*', { count: 'exact', head: true })
+            .eq('phone', identifier) // Identifier stored in phone column
+            .gte('created_at', oneMinuteAgo)
+
+        if (count !== null && count >= 10) {
+            return NextResponse.json({ error: 'Too many requests. Please wait a minute.' }, { status: 429 })
+        }
+
         const code = Math.floor(100000 + Math.random() * 900000).toString() // 6 digits
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // 5 minutes
 
-        const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        // Removed redundant client creation (moved up)
 
         // Save OTP (using 'phone' column as generic identifier)
         const { error: dbError } = await adminSupabase
