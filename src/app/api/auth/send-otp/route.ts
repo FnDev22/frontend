@@ -18,12 +18,7 @@ export async function POST(request: NextRequest) {
     try {
         const { phone, email, purpose } = await request.json()
 
-        // DEBUG CREDENTIALS
-        const emailUser = process.env.EMAIL_USER
-        const emailPass = process.env.EMAIL_PASS
-        console.log('[OTP Debug] Email User:', emailUser, 'Length:', emailUser?.length)
-        console.log('[OTP Debug] Email Pass Type:', typeof emailPass, 'Length:', emailPass?.length)
-        console.log('[OTP Debug] First char:', emailPass?.charAt(0), 'Last char:', emailPass?.slice(-1))
+        // DEBUG CREDENTIALS REMOVED
 
 
         if ((!phone && !email) || !purpose) {

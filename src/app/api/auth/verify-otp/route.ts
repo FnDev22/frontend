@@ -29,10 +29,20 @@ export async function POST(request: NextRequest) {
             .eq('phone', identifier)
             .eq('code', code)
             .eq('purpose', purpose)
-            .gt('expires_at', new Date().toISOString()) // Not expired
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle()
+
+        // DEBUG OTP VERIFICATION
+        const now = new Date()
+        console.log('[Verify OTP] Checking:', { identifier, code, purpose })
+        console.log('[Verify OTP] Current Server Time:', now.toISOString())
+        if (data) {
+            console.log('[Verify OTP] Found Record:', data)
+            console.log('[Verify OTP] Expires At:', data.expires_at)
+        } else {
+            console.log('[Verify OTP] No record found for criteria')
+        }
 
         if (error) {
             console.error('Verify OTP Error:', error)
@@ -40,8 +50,17 @@ export async function POST(request: NextRequest) {
         }
 
         if (!data) {
-            return NextResponse.json({ valid: false, error: 'Kode OTP salah atau kedaluwarsa' }, { status: 400 })
+            return NextResponse.json({ valid: false, error: 'Kode OTP salah atau tidak ditemukan' }, { status: 400 })
         }
+
+        // Check Expiration in JS (Safer for Timezones)
+        const expiresAt = new Date(data.expires_at)
+        if (now > expiresAt) {
+            console.log('[Verify OTP] Expired! Now > ExpiresAt')
+            return NextResponse.json({ valid: false, error: 'Kode OTP sudah kadaluarsa (Expired)' }, { status: 400 })
+        }
+
+
 
         // Delete used OTP (or mark used)
         await adminSupabase.from('otp_codes').delete().eq('id', data.id)
