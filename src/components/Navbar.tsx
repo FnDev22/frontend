@@ -54,24 +54,15 @@ export function Navbar({ initialUser }: NavbarProps) {
     })
 
     useEffect(() => {
-        const getUser = async () => {
-            const { data: { user: authUser } } = await supabase.auth.getUser()
-            if (authUser) {
-                const { data: profile } = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .eq('id', authUser.id)
-                    .maybeSingle()
-                setUser(profile ?? profileFromAuth(authUser))
-            } else {
-                setUser(null)
-            }
-        }
-        getUser()
         setMounted(true)
 
+        // Optimasi: Hanya gunakan onAuthStateChange. Event 'INITIAL_SESSION' akan fire saat mount
+        // jika session ada, sehingga kita tidak perlu panggil getUser() manual yang berpotensi race condition.
         const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (session?.user) {
+                // Cek apakah user berubah untuk menghindari fetch berulang jika session refresh token
+                if (user?.id === session.user.id) return
+
                 const { data: profile } = await supabase
                     .from('profiles')
                     .select('*')
@@ -86,7 +77,7 @@ export function Navbar({ initialUser }: NavbarProps) {
         return () => {
             authListener.subscription.unsubscribe()
         }
-    }, [])
+    }, [user?.id])
 
     const handleLogout = async () => {
         try {
