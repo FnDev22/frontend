@@ -22,17 +22,28 @@ export async function POST(request: NextRequest) {
         const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
         // 1. Verify OTP again (Secure)
+        // 1. Verify OTP again (Secure)
         const { data: otpData, error: otpError } = await adminSupabase
             .from('otp_codes')
             .select('*')
-            .eq('email', email.trim().toLowerCase())
+            .eq('phone', email.trim().toLowerCase()) // 'phone' column stores the identifier (email/phone)
             .eq('code', otp_code)
             .eq('purpose', 'register')
-            .gt('expires_at', new Date().toISOString())
+            .order('created_at', { ascending: false })
+            .limit(1)
             .maybeSingle()
 
         if (otpError || !otpData) {
-            return NextResponse.json({ error: 'Kode OTP tidak valid atau kedaluwarsa' }, { status: 400 })
+            console.error('Register API OTP Error:', otpError || 'No OTP found')
+            return NextResponse.json({ error: 'Kode OTP tidak valid' }, { status: 400 })
+        }
+
+        // Check Expiration
+        const now = new Date()
+        const expiresAt = new Date(otpData.expires_at)
+        if (now > expiresAt) {
+            console.log('Register API OTP Expired:', { now, expiresAt })
+            return NextResponse.json({ error: 'Kode OTP sudah kadaluarsa' }, { status: 400 })
         }
 
         // 2. Create User (Auto Confirm)
