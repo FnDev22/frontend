@@ -8,6 +8,14 @@ export async function POST(request: NextRequest) {
         const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
         const userAgent = request.headers.get('user-agent') || 'unknown'
 
+        // Security: Rate Limit to prevent Email Flooding
+        const { checkRateLimit } = await import('@/lib/rate-limit')
+        const rateLimit = await checkRateLimit(`log-fail:${ip}:${userAgent}`, 10, 60 * 60) // 10 alerts per hour per IP
+
+        if (!rateLimit.success) {
+            return NextResponse.json({ success: true }) // Fail silently to the attacker
+        }
+
         const supabaseAdmin = createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.SUPABASE_SERVICE_ROLE_KEY!,

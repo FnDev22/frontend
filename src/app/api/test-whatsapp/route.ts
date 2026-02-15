@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase-server'
 
 /**
  * Test WhatsApp Service Connection
@@ -69,6 +70,18 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
     try {
+        // Security: Admin Only Check
+        const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        const adminEmail = process.env.ADMIN_EMAIL || 'ae132118@gmail.com'
+
+        if (!user || user.email !== adminEmail) {
+            return NextResponse.json(
+                { error: 'Unauthorized: Admin access required' },
+                { status: 401 }
+            )
+        }
+
         const body = await request.json()
         const { target, message } = body
 

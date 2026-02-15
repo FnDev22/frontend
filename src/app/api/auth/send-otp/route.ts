@@ -28,6 +28,16 @@ export async function POST(request: NextRequest) {
         const isEmail = !!email
         const identifier = isEmail ? email.trim().toLowerCase() : normalizePhone(phone)
 
+        // Security: Rate Limit by IP + UserAgent to prevent bombing
+        const ip = request.headers.get('x-forwarded-for') || 'unknown'
+        const ua = request.headers.get('user-agent') || 'unknown'
+        const { checkRateLimit } = await import('@/lib/rate-limit')
+        const rateLimit = await checkRateLimit(`otp:${ip}:${ua}`, 5, 60 * 10) // 5 requests per 10 mins
+
+        if (!rateLimit.success) {
+            return NextResponse.json({ error: rateLimit.message }, { status: 429 })
+        }
+
         // Rate Limiter: 10 requests per minute
         const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString()
         const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)

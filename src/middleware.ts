@@ -8,6 +8,21 @@ const PROTECTED_PREFIXES = ['/admin', '/dashboard']
 export async function middleware(request: NextRequest) {
     const path = request.nextUrl.pathname
 
+    // Maintenance Mode Check
+    const isMaintenanceMode = process.env.MAINTENANCE_MODE === 'true'
+
+    // Allow access to maintenance page itself and static assets
+    if (isMaintenanceMode && !path.startsWith('/maintenance') && !path.startsWith('/_next') && !path.startsWith('/api/')) {
+        // Check for Admin Bypass Cookie
+        // Note: In a real scenario, you might want a more secure bypass token.
+        // For now, we rely on the session cookie if available, or a specific admin_access cookie.
+        const adminAccess = request.cookies.get('sb-access-token') || request.cookies.get('admin_access')
+
+        if (!adminAccess) {
+            return NextResponse.redirect(new URL('/maintenance', request.url))
+        }
+    }
+
     // Generate Nonce for CSP
     const nonce = Buffer.from(crypto.randomUUID()).toString('base64')
 

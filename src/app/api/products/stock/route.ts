@@ -12,6 +12,16 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Missing productId' }, { status: 400 })
     }
 
+    // Security: Rate Limit to prevent Inventory Scraping
+    const ip = request.headers.get('x-forwarded-for') || 'unknown'
+    const ua = request.headers.get('user-agent') || 'unknown'
+    const { checkRateLimit } = await import('@/lib/rate-limit')
+    const rateLimit = await checkRateLimit(`stock:${ip}:${ua}`, 20, 60) // 20 requests per minute
+
+    if (!rateLimit.success) {
+        return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
+    }
+
     try {
         const { count, error } = await adminSupabase
             .from('account_stock')
