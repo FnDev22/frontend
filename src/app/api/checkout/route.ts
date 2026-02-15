@@ -20,30 +20,64 @@ export async function GET(_request: NextRequest) {
 }
 
 export async function POST(request: Request) {
-    const { productId, fullName, email, whatsapp, note, promo_text: promoText, promo_discount_percent: discountPercent = 0, promo_discount_value: discountValue = 0, quantity: qty = 1 } = await request.json()
+    console.log('[Checkout] API Route called')
+
+    // 1. Log Request Payload
+    let body
+    try {
+        body = await request.json()
+        console.log('[Checkout] Payload received:', JSON.stringify(body))
+    } catch (e) {
+        console.error('[Checkout] Failed to parse JSON body:', e)
+        return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    }
+
+    const { productId, fullName, email, whatsapp, note, promo_text: promoText, promo_discount_percent: discountPercent = 0, promo_discount_value: discountValue = 0, quantity: qty = 1 } = body
     const quantity = Math.max(1, parseInt(String(qty), 10) || 1)
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+    // 2. Verify Environment Variables
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    console.log('[Checkout] Env Check:', {
+        NEXT_PUBLIC_SUPABASE_URL: !!supabaseUrl,
+        SUPABASE_SERVICE_ROLE_KEY: !!supabaseServiceKey,
+        EMAIL_USER: !!process.env.EMAIL_USER,
+        EMAIL_PASS: !!process.env.EMAIL_PASS,
+        ADMIN_EMAIL: !!process.env.ADMIN_EMAIL
+    })
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+        console.error('[Checkout] Critical Env Vars missing!')
+        return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
+    }
+
     const adminSupabase = createSupabaseClient(supabaseUrl, supabaseServiceKey)
 
-    const { data: product } = await adminSupabase
+    // 3. Fetch Product
+    const { data: product, error: productError } = await adminSupabase
         .from('products')
         .select('*')
         .eq('id', productId)
         .single()
 
-    if (!product) {
+    if (productError || !product) {
+        console.error('[Checkout] Product fetch error:', productError)
         return NextResponse.json({ error: 'Product not found' }, { status: 404 })
     }
+    console.log('[Checkout] Product found:', product.title)
 
     const minBuy = product.min_buy ?? 1
     if (quantity < minBuy) {
         return NextResponse.json({ error: `Minimum pembelian ${minBuy} unit` }, { status: 400 })
     }
 
-    const { data: availableStock } = await adminSupabase.rpc('get_available_stock', { product_uuid: productId })
+    const { data: availableStock, error: stockError } = await adminSupabase.rpc('get_available_stock', { product_uuid: productId })
+    if (stockError) console.error('[Checkout] Stock RPC error:', stockError)
+
     const available = typeof availableStock === 'number' ? availableStock : 0
+    console.log('[Checkout] Stock available:', available, 'Requested:', quantity)
+
     if (available < quantity) {
         return NextResponse.json({ error: `Stok tidak cukup. Tersedia: ${available} unit` }, { status: 400 })
     }
@@ -70,6 +104,7 @@ export async function POST(request: Request) {
 
     if (pakasirSlug && pakasirApiKey) {
         try {
+            console.log('[Checkout] Requesting QRIS from Pakasir...')
             const res = await fetch(`https://app.pakasir.com/api/transactioncreate/qris`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -81,16 +116,20 @@ export async function POST(request: Request) {
                 }),
             })
             const data = await res.json()
+            console.log('[Checkout] Pakasir response:', data)
+
             if (data?.payment?.payment_number) {
                 qrString = data.payment.payment_number
                 fee = Number(data.payment.fee) || 0
                 totalPayment = Number(data.payment.total_payment) ?? subtotal + fee
+            } else {
+                console.warn('[Checkout] Pakasir did not return payment_number', data)
             }
         } catch (e) {
-            console.error("Pakasir API Error", e)
+            console.error("[Checkout] Pakasir API Error", e)
         }
     } else {
-        console.warn("Pakasir credentials missing, using placeholder QR code")
+        console.warn("[Checkout] Pakasir credentials missing, using placeholder QR code")
     }
 
     // Create Order in Supabase
@@ -99,6 +138,7 @@ export async function POST(request: Request) {
 
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
 
+    console.log('[Checkout] Inserting order into DB:', orderId)
     const { error: insertError } = await adminSupabase
         .from('orders')
         .insert({
@@ -118,9 +158,10 @@ export async function POST(request: Request) {
         })
 
     if (insertError) {
-        console.error(insertError)
-        return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
+        console.error('[Checkout] Order insertion failed:', insertError)
+        return NextResponse.json({ error: 'Failed to create order', details: insertError.message }, { status: 500 })
     }
+    console.log('[Checkout] Order inserted successfully')
 
     // Refresh product page to update stock immediately
     revalidatePath(`/product/${productId}`)
@@ -150,40 +191,46 @@ export async function POST(request: Request) {
     await sendWhatsApp(adminNumber, adminMsg, 'admin')
 
     // Email Notification to Admin (Styled)
-    const { sendEmail } = await import('@/lib/mail')
-    const adminEmail = process.env.ADMIN_EMAIL || 'ae132118@gmail.com'
+    try {
+        console.log('[Checkout] Sending admin email...')
+        const { sendEmail } = await import('@/lib/mail')
+        const adminEmail = process.env.ADMIN_EMAIL || 'ae132118@gmail.com'
 
-    // Base email template function
-    const emailTemplate = (content: string) => `
-        <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 8px; overflow: hidden;">
-            <div style="background-color: #000; padding: 20px; text-align: center;">
-                <img src="https://f-pedia.my.id/logo.png" alt="F-PEDIA Logo" style="height: 40px; object-fit: contain;">
+        // Base email template function
+        const emailTemplate = (content: string) => `
+            <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 8px; overflow: hidden;">
+                <div style="background-color: #000; padding: 20px; text-align: center;">
+                    <img src="https://f-pedia.my.id/logo.png" alt="F-PEDIA Logo" style="height: 40px; object-fit: contain;">
+                </div>
+                <div style="padding: 24px;">
+                    ${content}
+                </div>
+                <div style="background-color: #f9f9f9; padding: 16px; text-align: center; font-size: 12px; color: #888;">
+                    &copy; ${new Date().getFullYear()} F-PEDIA. All rights reserved.
+                </div>
             </div>
-            <div style="padding: 24px;">
-                ${content}
-            </div>
-            <div style="background-color: #f9f9f9; padding: 16px; text-align: center; font-size: 12px; color: #888;">
-                &copy; ${new Date().getFullYear()} F-PEDIA. All rights reserved.
-            </div>
-        </div>
-    `
+        `
 
-    await sendEmail({
-        to: adminEmail,
-        subject: `[New Order] ${orderId} - ${productTitle}`,
-        html: emailTemplate(`
-            <h2 style="color: #000; margin-top: 0;">Order Baru Masuk</h2>
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-                <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Order ID</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${orderId}</td></tr>
-                <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Produk</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${productTitle}</td></tr>
-                <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Jumlah</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${quantity} unit</td></tr>
-                <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Total</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #d32f2f; font-weight: bold;">Rp ${totalPayment.toLocaleString('id-ID')}</td></tr>
-                <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Customer</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${email}</td></tr>
-                <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>WhatsApp</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${whatsapp}</td></tr>
-            </table>
-            <p style="margin-bottom: 0;">Status: <strong>Pending Payment</strong></p>
-        `)
-    }).catch(err => console.error('Failed to send admin email', err))
+        await sendEmail({
+            to: adminEmail,
+            subject: `[New Order] ${orderId} - ${productTitle}`,
+            html: emailTemplate(`
+                <h2 style="color: #000; margin-top: 0;">Order Baru Masuk</h2>
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                    <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Order ID</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${orderId}</td></tr>
+                    <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Produk</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${productTitle}</td></tr>
+                    <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Jumlah</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${quantity} unit</td></tr>
+                    <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Total</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #d32f2f; font-weight: bold;">Rp ${totalPayment.toLocaleString('id-ID')}</td></tr>
+                    <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Customer</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${email}</td></tr>
+                    <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>WhatsApp</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${whatsapp}</td></tr>
+                </table>
+                <p style="margin-bottom: 0;">Status: <strong>Pending Payment</strong></p>
+            `)
+        })
+        console.log('[Checkout] Admin email sent')
+    } catch (err) {
+        console.error('[Checkout] Failed to send admin email', err)
+    }
 
     const userWhatsappNormalized = typeof whatsapp === 'string' && whatsapp.trim() ? normalizePhoneForWhatsApp(whatsapp.trim()) : null
     const userMsgOrder = `*Kamu telah order di F-PEDIA*\n\nHalo,\n\nPesanan Anda:\n• Produk: *${productTitle}*\n• Jumlah: ${quantity} unit\n• Total pembayaran: Rp ${totalPayment.toLocaleString('id-ID')}\n• Order ID: ${orderId}\n\n${promoTextStr ? `*Promo:* ${promoTextStr}\n\n` : ''}Silakan scan QR untuk pembayaran.\n*Harap bayar sebelum: ${payBeforeStr}*\n\nSetelah terverifikasi, akun akan dikirim ke WhatsApp ini.\n\nTerima kasih!`
