@@ -31,11 +31,14 @@ import { SecurityProvider } from "@/components/SecurityProvider";
 
 // ... existing imports
 
+import { headers } from "next/headers";
+
 export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const nonce = (await headers()).get('x-nonce') || undefined;
   const supabase = await createClient();
   const {
     data: { session },
@@ -48,7 +51,7 @@ export default async function RootLayout({
     <html lang="id" suppressHydrationWarning data-scroll-behavior="smooth">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <SecurityProvider isAdmin={!!isAdmin}>
-          <ThemeProvider>
+          <ThemeProvider nonce={nonce}>
             <Navbar initialUser={user} />
             <div className="flex min-h-screen flex-col">
               <main className="flex-1">{children}</main>
