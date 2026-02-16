@@ -1,5 +1,5 @@
 
-import { createServerClient } from '@supabase/ssr'
+
 import { NextResponse, type NextRequest } from 'next/server'
 
 /** Routes that require an authenticated user */
@@ -91,69 +91,29 @@ export async function middleware(request: NextRequest) {
     response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
     response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
 
-    const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-            cookies: {
-                getAll() {
-                    return request.cookies.getAll()
-                },
-                setAll(cookiesToSet) {
-                    cookiesToSet.forEach(({ name, value }) =>
-                        request.cookies.set(name, value)
-                    )
-                    response = NextResponse.next({
-                        request: { headers: requestHeaders },
-                    })
-                    response.headers.set('Content-Security-Policy', cspHeader)
-                    response.headers.set('X-Content-Type-Options', 'nosniff')
-                    response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
-                    response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-                    cookiesToSet.forEach(({ name, value, options }) =>
-                        response.cookies.set(name, value, options)
-                    )
-                },
-            },
-        }
-    )
+    // Simplified Auth Check
+    // We do NOT use createServerClient or getUser() here because it triggers
+    // token refreshes, leading to race conditions and "Invalid Refresh Token" loops.
+    // Instead, we just check for the presence of a Supabase session cookie.
+    // The actual security validation happens in the Server Components (layout/page).
 
-    // Wrap in try-catch: concurrent requests can race to refresh the same
-    // token, causing "refresh_token_already_used". We treat that as
-    // unauthenticated rather than crashing.
-    let user = null
-    try {
-        const { data, error } = await supabase.auth.getUser()
-        if (error) {
-            throw error
-        }
-        user = data.user
-    } catch {
-        // Force clear all Supabase auth cookies on error
-        // This ensures the client immediately stops sending the invalid token
-        request.cookies.getAll().forEach((cookie) => {
-            if (cookie.name.startsWith('sb-')) {
-                response.cookies.delete(cookie.name)
-            }
-        })
-        await supabase.auth.signOut()
-    }
+    // Check for any cookie that looks like a Supabase session
+    const hasSession = request.cookies.getAll().some(
+        (cookie) => cookie.name.startsWith('sb-') && cookie.name.endsWith('-auth-token')
+    )
 
     // Protect Admin Routes
     if (path.startsWith('/admin')) {
-        if (!user) {
+        if (!hasSession) {
             return NextResponse.redirect(new URL('/login', request.url))
         }
-        // Use Env Variable for Admin Email
-        const adminEmail = process.env.ADMIN_EMAIL || 'ae132118@gmail.com'
-        if (user.email !== adminEmail) {
-            return NextResponse.redirect(new URL('/', request.url))
-        }
+        // Admin email check is now deferred to the Server Component (layout or page)
+        // to avoid calling getUser() here.
     }
 
     // Protect User Dashboard
     if (path.startsWith('/dashboard')) {
-        if (!user) {
+        if (!hasSession) {
             return NextResponse.redirect(new URL('/login', request.url))
         }
     }
