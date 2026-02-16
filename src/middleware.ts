@@ -124,9 +124,15 @@ export async function middleware(request: NextRequest) {
     let user = null
     try {
         const { data, error } = await supabase.auth.getUser()
-        if (!error) user = data.user
+        if (error) {
+            // Invalid token or refresh error -> Clear cookies to stop client retry loop
+            await supabase.auth.signOut()
+        } else {
+            user = data.user
+        }
     } catch {
-        // network / unexpected error — treat as unauthenticated
+        // Unexpected error -> Safe fallback to clear cookies
+        await supabase.auth.signOut()
     }
 
     // Protect Admin Routes
