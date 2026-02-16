@@ -125,13 +125,17 @@ export async function middleware(request: NextRequest) {
     try {
         const { data, error } = await supabase.auth.getUser()
         if (error) {
-            // Invalid token or refresh error -> Clear cookies to stop client retry loop
-            await supabase.auth.signOut()
-        } else {
-            user = data.user
+            throw error
         }
+        user = data.user
     } catch {
-        // Unexpected error -> Safe fallback to clear cookies
+        // Force clear all Supabase auth cookies on error
+        // This ensures the client immediately stops sending the invalid token
+        request.cookies.getAll().forEach((cookie) => {
+            if (cookie.name.startsWith('sb-')) {
+                response.cookies.delete(cookie.name)
+            }
+        })
         await supabase.auth.signOut()
     }
 

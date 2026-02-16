@@ -90,6 +90,21 @@ export function Navbar({ initialUser }: NavbarProps) {
         }
     }, [])
 
+    // Safety: If initialUser is null (server rejected session) but we have a session in client storage,
+    // we should forcefully clear it to avoid "Invalid Refresh Token" loops.
+    useEffect(() => {
+        const checkSessionMismatch = async () => {
+            if (!initialUser) {
+                const { data: { session } } = await supabase.auth.getSession()
+                if (session) {
+                    await supabase.auth.signOut()
+                    setUser(null)
+                }
+            }
+        }
+        checkSessionMismatch()
+    }, [initialUser])
+
     const handleLogout = async () => {
         try {
             await supabase.auth.signOut()
