@@ -41,9 +41,15 @@ export default async function RootLayout({
 }>) {
   const nonce = (await headers()).get('x-nonce') || undefined;
   const supabase = await createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  let session = null
+  try {
+    const { data } = await supabase.auth.getSession();
+    session = data.session;
+  } catch (error) {
+    console.error('RootLayout: Error getting session - forcing guest mode:', error);
+    // Ignore error, treat as signed out.
+    // The client-side AuthSanitizer will clean up the bad token.
+  }
   const user = session?.user ?? null;
 
   const isAdmin = user?.email === 'ae132118@gmail.com' || user?.user_metadata?.role === 'admin';
