@@ -1,6 +1,7 @@
 
 
 import { NextResponse, type NextRequest } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
 /** Routes that require an authenticated user */
 const PROTECTED_PREFIXES = ['/admin', '/dashboard']
@@ -8,8 +9,18 @@ const PROTECTED_PREFIXES = ['/admin', '/dashboard']
 export async function middleware(request: NextRequest) {
     const path = request.nextUrl.pathname
 
-    // Maintenance Mode Check
-    const isMaintenanceMode = process.env.MAINTENANCE_MODE === 'true'
+    // Maintenance Mode Check (Dynamic Sync with Bot)
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+    const { data: mSetting } = await supabase
+        .from('site_settings')
+        .select('value')
+        .eq('key', 'maintenance_mode')
+        .maybeSingle()
+
+    const isMaintenanceMode = mSetting?.value === true || process.env.MAINTENANCE_MODE === 'true'
 
     // Allow access to maintenance page itself and static assets
     // Also allow common image/font extensions if they are in public folder
