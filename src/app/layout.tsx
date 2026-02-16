@@ -28,6 +28,7 @@ export const metadata: Metadata = {
 };
 
 import { SecurityProvider } from "@/components/SecurityProvider";
+import { AuthSanitizer } from "@/components/AuthSanitizer";
 
 // ... existing imports
 
@@ -51,6 +52,7 @@ export default async function RootLayout({
     <html lang="id" suppressHydrationWarning data-scroll-behavior="smooth">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <SecurityProvider isAdmin={!!isAdmin}>
+          <AuthSanitizer serverUserExists={!!user} />
           <ThemeProvider nonce={nonce}>
             <Navbar initialUser={user} />
             <div className="flex min-h-screen flex-col">
